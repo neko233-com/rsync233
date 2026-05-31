@@ -3,7 +3,7 @@
 `rsync233` is a Go implementation of practical cross-platform rsync workflows.
 It is built with Go 1.26 and runs on Windows, Linux, and macOS.
 
-Supported release targets:
+Supported release targets. In Go target names, `amd64` is the x86_64 build:
 
 - `windows/amd64`
 - `windows/arm64`
