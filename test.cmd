@@ -15,4 +15,7 @@ go build -o "%TEMP%\rsync233-test.exe" ./cmd/rsync233
 if errorlevel 1 exit /b 1
 del "%TEMP%\rsync233-test.exe" >nul 2>nul
 
+call check-platform-matrix.cmd
+if errorlevel 1 exit /b 1
+
 echo rsync233 test ok

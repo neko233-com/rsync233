@@ -3,6 +3,15 @@
 `rsync233` is a Go implementation of practical cross-platform rsync workflows.
 It is built with Go 1.26 and runs on Windows, Linux, and macOS.
 
+Supported release targets:
+
+- `windows/amd64`
+- `windows/arm64`
+- `linux/amd64`
+- `linux/arm64`
+- `darwin/amd64`
+- `darwin/arm64`
+
 ## Features
 
 - Local-to-local sync on every Go-supported desktop/server platform.
@@ -48,8 +57,9 @@ Remote endpoints require SSH public-key authentication and a valid
 ## Scripts
 
 - `run.cmd` builds and runs the CLI with forwarded arguments.
-- `test.cmd` runs formatting, dependency tidy checks, tests, and a build.
-- `deploy.cmd` creates release binaries under `dist/`.
+- `test.cmd` runs formatting, dependency tidy checks, tests, a local build, and the full platform matrix build check.
+- `check-platform-matrix.cmd` verifies Windows/Linux/macOS x amd64/arm64 builds.
+- `deploy.cmd` creates all supported release binaries under `dist/`.
 - `git-push.cmd` runs `test.cmd`, commits pending changes, and pushes `main`.
 
 ## Exit Codes
