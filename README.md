@@ -59,8 +59,18 @@ Remote endpoints require SSH public-key authentication and a valid
 - `run.cmd` builds and runs the CLI with forwarded arguments.
 - `test.cmd` runs formatting, dependency tidy checks, tests, a local build, and the full platform matrix build check.
 - `check-platform-matrix.cmd` verifies Windows/Linux/macOS x amd64/arm64 builds.
+- `verify-actions.cmd` validates the GitHub Actions workflows with Node.js 24 LTS tooling.
 - `deploy.cmd` creates all supported release binaries under `dist/`.
 - `git-push.cmd` runs `test.cmd`, commits pending changes, and pushes `main`.
+
+## GitHub Actions
+
+The repository follows the same CI/release shape as `neko233-com/unicli`:
+
+- `.github/workflows/ci.yml` runs on pushes and pull requests to `main`.
+- `.github/workflows/release.yml` runs on `v*` tags, builds release binaries, uploads artifacts, generates checksums, and creates a GitHub Release.
+- Both workflows set up Node.js 24 LTS and Go 1.26.
+- Both workflows verify formatting, `go mod tidy`, `go vet`, race-enabled tests, local build, workflow structure, and the six-platform build matrix.
 
 ## Exit Codes
 

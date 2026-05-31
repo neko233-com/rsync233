@@ -1,0 +1,16 @@
+{
+  "name": "rsync233-automation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Automation verification for rsync233 GitHub Actions.",
+  "type": "module",
+  "scripts": {
+    "verify:workflows": "node scripts/verify-workflows.mjs"
+  },
+  "devDependencies": {
+    "yaml": "^2.8.1"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

@@ -9,6 +9,7 @@ if not exist dist mkdir dist
 
 set APP=rsync233
 set PKG=./cmd/rsync233
+set CGO_ENABLED=0
 
 call :build windows amd64 ".exe" || exit /b 1
 call :build windows arm64 ".exe" || exit /b 1

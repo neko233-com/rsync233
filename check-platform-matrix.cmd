@@ -4,6 +4,7 @@ cd /d "%~dp0"
 
 set PKG=./cmd/rsync233
 set OUTDIR=%TEMP%\rsync233-platform-check
+set CGO_ENABLED=0
 
 if exist "%OUTDIR%" rmdir /s /q "%OUTDIR%"
 mkdir "%OUTDIR%"
