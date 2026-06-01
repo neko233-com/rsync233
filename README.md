@@ -114,7 +114,8 @@ Remote endpoints require SSH public-key authentication and a valid
 - `test.cmd` runs formatting, dependency tidy checks, tests, a local build, and the full platform matrix build check.
 - `check-platform-matrix.cmd` verifies Windows/Linux/macOS x amd64/arm64 builds.
 - `verify-actions.cmd` validates the GitHub Actions workflows with Node.js 24 LTS tooling.
-- `deploy.cmd` creates all supported release binaries under `dist/`.
+- `deploy.cmd` creates all supported release binaries under `dist/`, using release asset names compatible with the installers.
+- `scripts/deploy.ps1 [version]` updates `version.txt`, builds artifacts, commits release metadata, tags `v*`, and pushes the tag to trigger GitHub Release.
 - `git-push.cmd` runs `test.cmd`, commits pending changes, and pushes `main`.
 - `scripts/install.sh` and `scripts/install.ps1` install release binaries on macOS/Linux and Windows.
 
