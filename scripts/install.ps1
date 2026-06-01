@@ -116,7 +116,9 @@ function Assert-ReleaseExists([string]$VersionLabel, [string]$Arch) {
             }
         }
 
-        throw "Release lookup failed for $VersionLabel. $($_.Exception.Message)"
+        # GitHub's API may return 403 for anonymous requests or transient network errors
+        # even when the public release asset URL is reachable, so only 404 is fatal here.
+        return
     }
 }
 
