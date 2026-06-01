@@ -16,29 +16,32 @@ import (
 var ErrDiffFound = errors.New("differences found")
 
 type Options struct {
-	Archive        bool
-	Recursive      bool
-	Delete         bool
-	DeleteExcluded bool
-	DryRun         bool
-	Check          bool
-	Checksum       bool
-	Links          bool
-	PreservePerms  bool
-	NoPerms        bool
-	PreserveTimes  bool
-	NoTimes        bool
-	IgnoreTimes    bool
-	SizeOnly       bool
-	IgnoreExisting bool
-	Existing       bool
-	Update         bool
-	PreserveOwner  bool
-	Progress       bool
-	Includes       []string
-	Excludes       []string
-	FilterRules    []FilterRule
-	Logger         *slog.Logger
+	Archive           bool
+	Recursive         bool
+	Delete            bool
+	DeleteExcluded    bool
+	DryRun            bool
+	Check             bool
+	Checksum          bool
+	Links             bool
+	PreservePerms     bool
+	NoPerms           bool
+	PreserveTimes     bool
+	NoTimes           bool
+	IgnoreTimes       bool
+	SizeOnly          bool
+	IgnoreExisting    bool
+	IgnoreMissingArgs bool
+	Existing          bool
+	Update            bool
+	MinSize           int64
+	MaxSize           int64
+	PreserveOwner     bool
+	Progress          bool
+	Includes          []string
+	Excludes          []string
+	FilterRules       []FilterRule
+	Logger            *slog.Logger
 }
 
 func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary, error) {
@@ -74,6 +77,10 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 	dstRoot := dstEP.Path
 	srcInfo, err := srcFS.Stat(ctx, srcRoot)
 	if err != nil {
+		if opts.IgnoreMissingArgs && errors.Is(err, os.ErrNotExist) {
+			summary.SkippedEntries++
+			return summary, nil
+		}
 		return summary, fmt.Errorf("stat source: %w", err)
 	}
 	if srcInfo.IsDir && !opts.Archive && !opts.Recursive {
@@ -107,6 +114,10 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 			summary.ScannedDirs++
 		} else {
 			summary.ScannedFiles++
+		}
+		if !info.IsDir && !info.IsSymlink && skipBySize(info, opts) {
+			summary.SkippedEntries++
+			return nil
 		}
 		dstPath := dstRoot
 		if rel != "." {
@@ -166,6 +177,16 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 	}
 
 	return summary, nil
+}
+
+func skipBySize(info FileInfo, opts Options) bool {
+	if opts.MinSize > 0 && info.Size < opts.MinSize {
+		return true
+	}
+	if opts.MaxSize > 0 && info.Size > opts.MaxSize {
+		return true
+	}
+	return false
 }
 
 func buildFilter(opts Options) Filter {

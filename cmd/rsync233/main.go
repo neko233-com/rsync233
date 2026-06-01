@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/neko233-com/rsync233/internal/rsync233"
@@ -45,6 +46,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 	var includeFrom multiValue
 	var excludeFrom multiValue
 	var filters multiValue
+	var minSize sizeValue
+	var maxSize sizeValue
 	var checksum bool
 	var quiet bool
 
@@ -71,6 +74,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs.BoolVar(&opts.IgnoreTimes, "ignore-times", false, "do not skip files that match size and modification time")
 	fs.BoolVar(&opts.SizeOnly, "size-only", false, "skip files that have matching size regardless of modification time")
 	fs.BoolVar(&opts.IgnoreExisting, "ignore-existing", false, "skip updating files that already exist on the receiver")
+	fs.BoolVar(&opts.IgnoreMissingArgs, "ignore-missing-args", false, "ignore missing source arguments without error")
 	fs.BoolVar(&opts.Existing, "existing", false, "skip creating files that do not already exist on the receiver")
 	fs.BoolVar(&opts.Update, "u", false, "skip files that are newer on the receiver")
 	fs.BoolVar(&opts.Update, "update", false, "skip files that are newer on the receiver")
@@ -84,6 +88,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs.Var(&excludeFrom, "exclude-from", "read exclude patterns from file; may be repeated")
 	fs.Var(&filters, "f", "rsync-style filter rule such as '+ *.go' or '- cache/'; may be repeated")
 	fs.Var(&filters, "filter", "rsync-style filter rule such as '+ *.go' or '- cache/'; may be repeated")
+	fs.Var(&minSize, "min-size", "skip files smaller than SIZE; supports K, M, G, T suffixes")
+	fs.Var(&maxSize, "max-size", "skip files larger than SIZE; supports K, M, G, T suffixes")
 
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: rsync233 [options] SOURCE DEST")
@@ -103,6 +109,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 
 	opts.Checksum = checksum
+	opts.MinSize = int64(minSize)
+	opts.MaxSize = int64(maxSize)
 	fileIncludes, err := readPatternFiles(includeFrom)
 	if err != nil {
 		return err
@@ -202,4 +210,60 @@ func parseFilterRule(raw string) (bool, string, error) {
 		}
 	}
 	return false, "", fmt.Errorf("unsupported filter rule %q; use '+ pattern' or '- pattern'", raw)
+}
+
+type sizeValue int64
+
+func (s *sizeValue) String() string {
+	return strconv.FormatInt(int64(*s), 10)
+}
+
+func (s *sizeValue) Set(v string) error {
+	n, err := parseSize(v)
+	if err != nil {
+		return err
+	}
+	*s = sizeValue(n)
+	return nil
+}
+
+func parseSize(v string) (int64, error) {
+	raw := strings.TrimSpace(v)
+	if raw == "" {
+		return 0, fmt.Errorf("empty size")
+	}
+	multiplier := int64(1)
+	last := raw[len(raw)-1]
+	if last == 'b' || last == 'B' {
+		raw = strings.TrimSpace(raw[:len(raw)-1])
+		if raw == "" {
+			return 0, fmt.Errorf("invalid size %q", v)
+		}
+		last = raw[len(raw)-1]
+	}
+	switch last {
+	case 'k', 'K':
+		multiplier = 1024
+		raw = strings.TrimSpace(raw[:len(raw)-1])
+	case 'm', 'M':
+		multiplier = 1024 * 1024
+		raw = strings.TrimSpace(raw[:len(raw)-1])
+	case 'g', 'G':
+		multiplier = 1024 * 1024 * 1024
+		raw = strings.TrimSpace(raw[:len(raw)-1])
+	case 't', 'T':
+		multiplier = 1024 * 1024 * 1024 * 1024
+		raw = strings.TrimSpace(raw[:len(raw)-1])
+	}
+	if raw == "" {
+		return 0, fmt.Errorf("invalid size %q", v)
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("invalid size %q", v)
+	}
+	if n > (1<<63-1)/multiplier {
+		return 0, fmt.Errorf("size %q overflows int64", v)
+	}
+	return n * multiplier, nil
 }

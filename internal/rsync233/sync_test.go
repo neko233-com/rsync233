@@ -211,6 +211,51 @@ func TestSizeOnlySkipsMatchingSizeDespiteDifferentTimes(t *testing.T) {
 	assertFile(t, dstFile, "xyz")
 }
 
+func TestMinAndMaxSizeSkipTransfersButKeepDeleteIndex(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "small.txt"), "a")
+	mustWrite(t, filepath.Join(src, "keep.txt"), "12345")
+	mustWrite(t, filepath.Join(src, "large.txt"), "123456789")
+	mustWrite(t, filepath.Join(dst, "large.txt"), "old-large")
+	mustWrite(t, filepath.Join(dst, "extra.txt"), "extra")
+
+	summary, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{
+		Archive: true,
+		Delete:  true,
+		MinSize: 2,
+		MaxSize: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.CopiedFiles != 1 || summary.SkippedEntries != 2 || summary.DeletedEntries != 1 {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
+	assertFile(t, filepath.Join(dst, "keep.txt"), "12345")
+	assertFile(t, filepath.Join(dst, "large.txt"), "old-large")
+	if _, err := os.Stat(filepath.Join(dst, "small.txt")); !os.IsNotExist(err) {
+		t.Fatalf("small.txt should be skipped: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "extra.txt")); !os.IsNotExist(err) {
+		t.Fatalf("extra.txt should be deleted: %v", err)
+	}
+}
+
+func TestIgnoreMissingArgsSkipsMissingSource(t *testing.T) {
+	root := t.TempDir()
+	summary, err := Sync(context.Background(), filepath.Join(root, "missing")+string(os.PathSeparator), filepath.Join(root, "dst"), Options{
+		IgnoreMissingArgs: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.SkippedEntries != 1 || summary.Changed() {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
+}
+
 func TestPreservePermsCopiesSourceMode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission bits are not stable on Windows")

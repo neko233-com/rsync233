@@ -108,6 +108,61 @@ func TestRunFilterRules(t *testing.T) {
 	}
 }
 
+func TestRunMinAndMaxSize(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "small.txt"), "a")
+	mustWrite(t, filepath.Join(src, "keep.txt"), "12345")
+	mustWrite(t, filepath.Join(src, "large.txt"), "123456789")
+
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{"-a", "--min-size", "2", "--max-size", "5", src + string(os.PathSeparator), dst}, &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, filepath.Join(dst, "keep.txt"), "12345")
+	if _, err := os.Stat(filepath.Join(dst, "small.txt")); !os.IsNotExist(err) {
+		t.Fatalf("small.txt should be skipped: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "large.txt")); !os.IsNotExist(err) {
+		t.Fatalf("large.txt should be skipped: %v", err)
+	}
+}
+
+func TestRunIgnoreMissingArgs(t *testing.T) {
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{"--ignore-missing-args", filepath.Join(root, "missing"), filepath.Join(root, "dst")}, &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "skipped=1") {
+		t.Fatalf("stdout = %q, want skipped=1", stdout.String())
+	}
+}
+
+func TestParseSize(t *testing.T) {
+	tests := map[string]int64{
+		"42":  42,
+		"1K":  1024,
+		"2KB": 2 * 1024,
+		"3m":  3 * 1024 * 1024,
+		"4G":  4 * 1024 * 1024 * 1024,
+		"1TB": 1024 * 1024 * 1024 * 1024,
+	}
+	for input, want := range tests {
+		got, err := parseSize(input)
+		if err != nil {
+			t.Fatalf("parseSize(%q): %v", input, err)
+		}
+		if got != want {
+			t.Fatalf("parseSize(%q) = %d, want %d", input, got, want)
+		}
+	}
+	if _, err := parseSize("-1"); err == nil {
+		t.Fatal("expected negative size error")
+	}
+}
+
 func assertFile(t *testing.T, p, want string) {
 	t.Helper()
 	got, err := os.ReadFile(p)
