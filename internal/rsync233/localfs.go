@@ -45,6 +45,14 @@ func (LocalFS) Symlink(_ context.Context, target, path string) error {
 	return os.Symlink(target, path)
 }
 
+func (LocalFS) Rename(_ context.Context, oldPath, newPath string) error {
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return err
+	}
+	_ = os.RemoveAll(newPath)
+	return os.Rename(oldPath, newPath)
+}
+
 func (LocalFS) Remove(_ context.Context, path string) error {
 	return os.Remove(path)
 }

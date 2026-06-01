@@ -114,6 +114,55 @@ func TestDeleteBeforeRemovesConflictingDestinationBeforeTransfer(t *testing.T) {
 	assertFile(t, filepath.Join(dst, "conflict", "file.txt"), "new")
 }
 
+func TestBackupKeepsOverwrittenDestinationWithSuffix(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	dstFile := filepath.Join(dst, "a.txt")
+	mustWrite(t, filepath.Join(src, "a.txt"), "new")
+	mustWrite(t, dstFile, "old")
+
+	summary, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{
+		Archive:  true,
+		Backup:   true,
+		Checksum: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.UpdatedFiles != 1 {
+		t.Fatalf("updated files = %d, want 1", summary.UpdatedFiles)
+	}
+	assertFile(t, dstFile, "new")
+	assertFile(t, dstFile+"~", "old")
+}
+
+func TestBackupDirKeepsDeletedDestination(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	backupDir := filepath.Join(root, "backup")
+	mustWrite(t, filepath.Join(src, "keep.txt"), "keep")
+	mustWrite(t, filepath.Join(dst, "old.txt"), "old")
+
+	summary, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{
+		Archive:   true,
+		Delete:    true,
+		Backup:    true,
+		BackupDir: backupDir,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.DeletedEntries != 1 {
+		t.Fatalf("deleted entries = %d, want 1", summary.DeletedEntries)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "old.txt")); !os.IsNotExist(err) {
+		t.Fatalf("old.txt should be moved to backup: %v", err)
+	}
+	assertFile(t, filepath.Join(backupDir, "old.txt"), "old")
+}
+
 func TestDeleteAfterReportsConflictingDestination(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "src")

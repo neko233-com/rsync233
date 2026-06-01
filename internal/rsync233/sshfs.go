@@ -159,6 +159,14 @@ func (s *SFTPFS) Symlink(_ context.Context, target, p string) error {
 	return s.sftp.Symlink(target, p)
 }
 
+func (s *SFTPFS) Rename(_ context.Context, oldPath, newPath string) error {
+	if err := s.sftp.MkdirAll(path.Dir(newPath)); err != nil {
+		return err
+	}
+	_ = s.sftp.Remove(newPath)
+	return s.sftp.Rename(oldPath, newPath)
+}
+
 func (s *SFTPFS) Remove(_ context.Context, p string) error {
 	return s.sftp.Remove(p)
 }

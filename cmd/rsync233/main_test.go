@@ -154,6 +154,37 @@ func TestRunDeleteBefore(t *testing.T) {
 	assertFile(t, filepath.Join(dst, "conflict", "file.txt"), "new")
 }
 
+func TestRunBackupSuffix(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	dstFile := filepath.Join(dst, "a.txt")
+	mustWrite(t, filepath.Join(src, "a.txt"), "new")
+	mustWrite(t, dstFile, "old")
+
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{"-a", "--backup", "--suffix", ".bak", "-c", src + string(os.PathSeparator), dst}, &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, dstFile, "new")
+	assertFile(t, dstFile+".bak", "old")
+}
+
+func TestRunBackupDirImpliesBackup(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	backupDir := filepath.Join(root, "backup")
+	mustWrite(t, filepath.Join(src, "keep.txt"), "keep")
+	mustWrite(t, filepath.Join(dst, "old.txt"), "old")
+
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{"-a", "--delete", "--backup-dir", backupDir, src + string(os.PathSeparator), dst}, &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, filepath.Join(backupDir, "old.txt"), "old")
+}
+
 func TestRunRejectsConflictingDeleteModes(t *testing.T) {
 	root := t.TempDir()
 	var stdout, stderr bytes.Buffer

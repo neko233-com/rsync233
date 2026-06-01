@@ -48,6 +48,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 	var filters multiValue
 	var minSize sizeValue
 	var maxSize sizeValue
+	var backupDir string
+	var backupSuffix string
 	var checksum bool
 	var quiet bool
 
@@ -68,6 +70,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs.BoolVar(&opts.DeleteDuring, "delete-during", false, "accept rsync delete-during mode; currently deletes after the transfer scan")
 	fs.BoolVar(&opts.DeleteAfter, "delete-after", false, "delete destination files after transferring")
 	fs.BoolVar(&opts.DeleteExcluded, "delete-excluded", false, "also delete excluded destination files when --delete is enabled")
+	fs.BoolVar(&opts.Backup, "b", false, "make backups of overwritten or deleted destination files")
+	fs.BoolVar(&opts.Backup, "backup", false, "make backups of overwritten or deleted destination files")
+	fs.StringVar(&backupDir, "backup-dir", "", "store backups under DIR using source-relative paths")
+	fs.StringVar(&backupSuffix, "suffix", "~", "backup suffix when --backup-dir is not used")
 	fs.BoolVar(&opts.DryRun, "n", false, "show changes without writing")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "show changes without writing")
 	fs.BoolVar(&opts.Check, "check", false, "exit 2 when destination differs")
@@ -123,6 +129,11 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	opts.MinSize = int64(minSize)
 	opts.MaxSize = int64(maxSize)
+	opts.BackupDir = backupDir
+	opts.BackupSuffix = backupSuffix
+	if opts.BackupDir != "" {
+		opts.Backup = true
+	}
 	fileIncludes, err := readPatternFiles(includeFrom)
 	if err != nil {
 		return err

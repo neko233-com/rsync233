@@ -14,6 +14,7 @@ type FileSystem interface {
 	OpenWrite(ctx context.Context, path string, mode fs.FileMode) (io.WriteCloser, error)
 	ReadLink(ctx context.Context, path string) (string, error)
 	Symlink(ctx context.Context, target, path string) error
+	Rename(ctx context.Context, oldPath, newPath string) error
 	Remove(ctx context.Context, path string) error
 	RemoveAll(ctx context.Context, path string) error
 	Chtimes(ctx context.Context, path string, modTime time.Time) error

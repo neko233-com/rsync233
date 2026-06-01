@@ -39,6 +39,9 @@ type Options struct {
 	Update            bool
 	MinSize           int64
 	MaxSize           int64
+	Backup            bool
+	BackupDir         string
+	BackupSuffix      string
 	PreserveOwner     bool
 	Progress          bool
 	Includes          []string
@@ -179,7 +182,7 @@ func syncEntry(ctx context.Context, srcFS, dstFS FileSystem, dstRemote bool, dst
 		dstPath = joinPath(dstRemote, dstRoot, entry.Rel)
 	}
 	if entry.Info.IsSymlink {
-		copied, updated, err := syncSymlink(ctx, srcFS, dstFS, entry.Path, dstPath, opts)
+		copied, updated, err := syncSymlink(ctx, srcFS, dstFS, entry.Path, dstPath, entry.Rel, dstRemote, opts)
 		if err != nil {
 			return err
 		}
@@ -204,7 +207,7 @@ func syncEntry(ctx context.Context, srcFS, dstFS FileSystem, dstRemote bool, dst
 		}
 		return nil
 	}
-	copied, updated, bytesCopied, err := syncFile(ctx, srcFS, dstFS, entry.Path, dstPath, entry.Info, opts)
+	copied, updated, bytesCopied, err := syncFile(ctx, srcFS, dstFS, entry.Path, dstPath, entry.Rel, dstRemote, entry.Info, opts)
 	if err != nil {
 		return err
 	}
@@ -274,7 +277,7 @@ func infoIsDir(ctx context.Context, fsys FileSystem, p string) bool {
 	return err == nil && info.IsDir
 }
 
-func syncFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath string, srcInfo FileInfo, opts Options) (copied bool, updated bool, bytesCopied int64, err error) {
+func syncFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath, rel string, dstRemote bool, srcInfo FileInfo, opts Options) (copied bool, updated bool, bytesCopied int64, err error) {
 	dstInfo, err := dst.Stat(ctx, dstPath)
 	if err == nil && dstInfo.IsDir {
 		return false, false, 0, fmt.Errorf("destination %s is a directory", dstPath)
@@ -319,7 +322,13 @@ func syncFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath string,
 	if opts.DryRun {
 		return isCreate, !isCreate, 0, nil
 	}
-	if !isCreate && dstInfo.IsSymlink {
+	wasCreate := isCreate
+	if !isCreate && opts.Backup {
+		if err := backupPath(ctx, dst, dstPath, rel, dstRemote, opts); err != nil {
+			return false, false, 0, err
+		}
+		isCreate = true
+	} else if !isCreate && dstInfo.IsSymlink {
 		if err := dst.Remove(ctx, dstPath); err != nil {
 			return false, false, 0, err
 		}
@@ -333,10 +342,10 @@ func syncFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath string,
 	if preservePerms(opts) {
 		_ = dst.Chmod(ctx, dstPath, srcInfo.Mode.Perm())
 	}
-	return isCreate, !isCreate, srcInfo.Size, nil
+	return wasCreate, !wasCreate, srcInfo.Size, nil
 }
 
-func syncSymlink(ctx context.Context, src, dst FileSystem, srcPath, dstPath string, opts Options) (copied bool, updated bool, err error) {
+func syncSymlink(ctx context.Context, src, dst FileSystem, srcPath, dstPath, rel string, dstRemote bool, opts Options) (copied bool, updated bool, err error) {
 	if !opts.Archive && !opts.Links {
 		return false, false, nil
 	}
@@ -365,7 +374,11 @@ func syncSymlink(ctx context.Context, src, dst FileSystem, srcPath, dstPath stri
 		return isCreate, !isCreate, nil
 	}
 	if !isCreate {
-		if err := dst.Remove(ctx, dstPath); err != nil {
+		if opts.Backup {
+			if err := backupPath(ctx, dst, dstPath, rel, dstRemote, opts); err != nil {
+				return false, false, err
+			}
+		} else if err := dst.Remove(ctx, dstPath); err != nil {
 			return false, false, err
 		}
 	}
@@ -504,7 +517,13 @@ func deleteExtraneous(ctx context.Context, dst FileSystem, dstRoot string, remot
 			continue
 		}
 		var err error
-		if entry.IsDir {
+		if opts.Backup && !entry.IsDir {
+			rel, relErr := relPath(remote, dstRoot, entry.Path)
+			if relErr != nil {
+				return deleted, relErr
+			}
+			err = backupPath(ctx, dst, entry.Path, normalizeRel(rel), remote, opts)
+		} else if entry.IsDir {
 			err = dst.RemoveAll(ctx, entry.Path)
 		} else {
 			err = dst.Remove(ctx, entry.Path)
@@ -516,6 +535,25 @@ func deleteExtraneous(ctx context.Context, dst FileSystem, dstRoot string, remot
 		opts.Logger.Info("delete", "path", entry.Path)
 	}
 	return deleted, nil
+}
+
+func backupPath(ctx context.Context, fsys FileSystem, originalPath, rel string, remote bool, opts Options) error {
+	backup := backupTargetPath(originalPath, rel, remote, opts)
+	if backup == originalPath {
+		return fmt.Errorf("backup path equals original path: %s", originalPath)
+	}
+	return fsys.Rename(ctx, originalPath, backup)
+}
+
+func backupTargetPath(originalPath, rel string, remote bool, opts Options) string {
+	if opts.BackupDir != "" {
+		return joinPath(remote, opts.BackupDir, rel)
+	}
+	suffix := opts.BackupSuffix
+	if suffix == "" {
+		suffix = "~"
+	}
+	return originalPath + suffix
 }
 
 func sourceTypeConflict(src, dst FileInfo) bool {

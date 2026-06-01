@@ -27,6 +27,8 @@ Supported release targets. In Go target names, `amd64` is the x86_64 build:
 - Common rsync transfer controls: `--ignore-times`, `--size-only`,
   `--ignore-existing`, `--existing`, `--update`, `--ignore-missing-args`,
   `--min-size`, and `--max-size`.
+- Backup controls: `--backup`, `--backup-dir`, and `--suffix` preserve overwritten
+  or deleted destination files.
 - Importable Go API through `internal/rsync233` for repo-local extension.
 
 ## Install
@@ -92,6 +94,8 @@ rsync233 -a .\public\ .\dist
 rsync233 -a --delete --exclude "*.tmp" .\public\ .\dist
 rsync233 -a --delete-before .\public\ .\dist
 rsync233 -a --delete --delete-excluded --exclude "cache/" .\public\ .\dist
+rsync233 -a --backup --suffix ".bak" .\public\ .\dist
+rsync233 -a --delete --backup-dir .\rsync-backups .\public\ .\dist
 rsync233 -r -p .\scripts\ .\bin
 rsync233 -r -t .\assets\ .\published-assets
 rsync233 -a --include "*.html" --exclude "*.tmp" .\public\ .\dist
