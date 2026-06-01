@@ -37,9 +37,30 @@ download() {
     url="$1"
     dest="$2"
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$url" -o "$dest"
+        http_code="$(curl -sSL -o "$dest" -w "%{http_code}" "$url" 2>/dev/null || true)"
+        if [ "$http_code" = "200" ]; then
+            return 0
+        fi
+
+        rm -f "$dest"
+        if [ "$http_code" = "404" ]; then
+            echo "No GitHub Release asset was found for this install target." >&2
+            echo "This installer downloads published release binaries, but this repository does not currently have that release." >&2
+            echo "Install from source instead: go install github.com/${REPO}/cmd/${BINARY_NAME}@latest" >&2
+            exit 1
+        fi
+
+        echo "Download failed from ${url} (HTTP ${http_code:-unknown})." >&2
+        exit 1
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$dest" "$url"
+        if wget -qO "$dest" "$url"; then
+            return 0
+        fi
+
+        rm -f "$dest"
+        echo "Download failed from ${url}. The repository may not have a published GitHub Release for this version yet." >&2
+        echo "Install from source instead: go install github.com/${REPO}/cmd/${BINARY_NAME}@latest" >&2
+        exit 1
     else
         echo "curl or wget is required." >&2
         exit 1

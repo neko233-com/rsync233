@@ -34,6 +34,10 @@ Supported release targets. In Go target names, `amd64` is the x86_64 build:
 
 ## Install
 
+One-click installers and `rsync233 update` download GitHub Release binaries. If the
+repository does not have a published `v*` tag/release yet, use the source install
+command below instead.
+
 ### One-Click Install
 
 macOS / Linux:

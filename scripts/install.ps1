@@ -90,6 +90,46 @@ public static extern IntPtr SendMessageTimeout(
     }
 }
 
+function Assert-ReleaseExists([string]$VersionLabel, [string]$Arch) {
+    if ($VersionLabel -eq "latest") {
+        $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
+    } else {
+        $apiUrl = "https://api.github.com/repos/$Repo/releases/tags/$VersionLabel"
+    }
+
+    try {
+        Invoke-WebRequest -UseBasicParsing -Headers @{
+            Accept = "application/vnd.github+json"
+            "User-Agent" = $BinaryName
+        } -Uri $apiUrl | Out-Null
+    } catch {
+        $response = $_.Exception.Response
+        if ($null -ne $response) {
+            try {
+                if ([int]$response.StatusCode -eq 404) {
+                    throw "No GitHub Release asset was found for $VersionLabel on windows/$Arch. This installer downloads published release binaries, but this repository does not currently have that release. Install from source instead: go install github.com/$Repo/cmd/$BinaryName@latest"
+                }
+            } catch {
+                if ($_.Exception.Message -like "No GitHub Release asset was found*") {
+                    throw
+                }
+            }
+        }
+
+        throw "Release lookup failed for $VersionLabel. $($_.Exception.Message)"
+    }
+}
+
+function Invoke-ReleaseDownload([string]$Url, [string]$Dest, [string]$VersionLabel, [string]$Arch) {
+    Assert-ReleaseExists -VersionLabel $VersionLabel -Arch $Arch
+
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $Dest
+    } catch {
+        throw "Download failed from $Url. $($_.Exception.Message)"
+    }
+}
+
 $Arch = Get-Arch
 $Asset = "${BinaryName}-windows-${Arch}.exe"
 if ($Version -eq "latest" -or [string]::IsNullOrWhiteSpace($Version)) {
@@ -107,7 +147,7 @@ Write-Host "Installing ${BinaryName} $versionLabel for windows/$Arch..."
 Write-Host "Downloading $url..."
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-Invoke-WebRequest -Uri $url -OutFile $dest
+Invoke-ReleaseDownload -Url $url -Dest $dest -VersionLabel $versionLabel -Arch $Arch
 
 $pathCandidates = @(
     (Join-Path $env:USERPROFILE ".local\bin"),
