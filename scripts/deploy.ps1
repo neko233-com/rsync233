@@ -69,7 +69,11 @@ if ($LASTEXITCODE -eq 1) {
 }
 
 Write-Host "[5/6] Tagging $newVersion..."
-git tag -d $newVersion 2>$null | Out-Null
+git rev-parse -q --verify "refs/tags/$newVersion" *> $null
+if ($LASTEXITCODE -eq 0) {
+    git tag -d $newVersion | Out-Null
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 git tag -a $newVersion -m "Release $newVersion"
 if ($LASTEXITCODE -ne 0) {
     git tag -f -a $newVersion -m "Release $newVersion"
