@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -208,6 +209,64 @@ func TestSizeOnlySkipsMatchingSizeDespiteDifferentTimes(t *testing.T) {
 		t.Fatalf("expected no changes, got %+v", summary)
 	}
 	assertFile(t, dstFile, "xyz")
+}
+
+func TestPreservePermsCopiesSourceMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not stable on Windows")
+	}
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	srcFile := filepath.Join(src, "script.sh")
+	mustWrite(t, srcFile, "#!/bin/sh\n")
+	if err := os.Chmod(srcFile, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{Recursive: true, PreservePerms: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(dst, "script.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o755 {
+		t.Fatalf("mode = %v, want 0755", got)
+	}
+}
+
+func TestNoPermsLeavesExistingModeInArchive(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not stable on Windows")
+	}
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	srcFile := filepath.Join(src, "script.sh")
+	dstFile := filepath.Join(dst, "script.sh")
+	mustWrite(t, srcFile, "#!/bin/sh\necho new\n")
+	mustWrite(t, dstFile, "old\n")
+	if err := os.Chmod(srcFile, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dstFile, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{Archive: true, NoPerms: true, IgnoreTimes: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dstFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("mode = %v, want 0600", got)
+	}
+	assertFile(t, dstFile, "#!/bin/sh\necho new\n")
 }
 
 func TestIncludeOverridesExclude(t *testing.T) {

@@ -24,6 +24,8 @@ type Options struct {
 	Check          bool
 	Checksum       bool
 	Links          bool
+	PreservePerms  bool
+	NoPerms        bool
 	IgnoreTimes    bool
 	SizeOnly       bool
 	IgnoreExisting bool
@@ -169,7 +171,7 @@ func ensureDir(ctx context.Context, dst FileSystem, dstPath string, mode fs.File
 		if !infoIsDir(ctx, dst, dstPath) {
 			return false, fmt.Errorf("destination %s exists and is not a directory", dstPath)
 		}
-		if opts.Archive && !opts.DryRun {
+		if preservePerms(opts) && !opts.DryRun {
 			_ = dst.Chmod(ctx, dstPath, mode.Perm())
 		}
 		return false, nil
@@ -180,7 +182,7 @@ func ensureDir(ctx context.Context, dst FileSystem, dstPath string, mode fs.File
 	if opts.DryRun {
 		return true, nil
 	}
-	return true, dst.MkdirAll(ctx, dstPath, mode.Perm())
+	return true, dst.MkdirAll(ctx, dstPath, dirCreateMode(mode, opts))
 }
 
 func infoIsDir(ctx context.Context, fsys FileSystem, p string) bool {
@@ -238,12 +240,14 @@ func syncFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath string,
 			return false, false, 0, err
 		}
 	}
-	if err := copyFile(ctx, src, dst, srcPath, dstPath, srcInfo.Mode.Perm()); err != nil {
+	if err := copyFile(ctx, src, dst, srcPath, dstPath, fileCreateMode(srcInfo.Mode, opts)); err != nil {
 		return false, false, 0, err
 	}
 	if opts.Archive {
-		_ = dst.Chmod(ctx, dstPath, srcInfo.Mode.Perm())
 		_ = dst.Chtimes(ctx, dstPath, srcInfo.ModTime)
+	}
+	if preservePerms(opts) {
+		_ = dst.Chmod(ctx, dstPath, srcInfo.Mode.Perm())
 	}
 	return isCreate, !isCreate, srcInfo.Size, nil
 }
@@ -351,6 +355,24 @@ func sameModTime(a, b time.Time) bool {
 		d = -d
 	}
 	return d <= time.Second
+}
+
+func preservePerms(opts Options) bool {
+	return (opts.Archive || opts.PreservePerms) && !opts.NoPerms
+}
+
+func fileCreateMode(mode fs.FileMode, opts Options) fs.FileMode {
+	if preservePerms(opts) {
+		return mode.Perm()
+	}
+	return 0o666
+}
+
+func dirCreateMode(mode fs.FileMode, opts Options) fs.FileMode {
+	if preservePerms(opts) {
+		return mode.Perm()
+	}
+	return 0o777
 }
 
 func deleteExtraneous(ctx context.Context, dst FileSystem, dstRoot string, remote bool, sourceIndex map[string]FileInfo, filter Filter, opts Options) (int, error) {

@@ -18,6 +18,7 @@ Supported release targets. In Go target names, `amd64` is the x86_64 build:
 - SSH/SFTP endpoints for cross-machine sync without shelling out to rsync.
 - rsync-style source trailing slash behavior.
 - Archive/link mode preserves symbolic links as links.
+- `-p`/`--perms` preserves permission bits; `--no-perms` disables permission preservation in archive mode.
 - Incremental copy by file size and modification time, with optional SHA-256 checksum comparison.
 - `--delete`, `--delete-excluded`, `--dry-run`, `--check`, `--include`, and repeatable `--exclude` rules.
 - Common rsync transfer controls: `--ignore-times`, `--size-only`,
@@ -42,6 +43,7 @@ Examples:
 rsync233 -a .\public\ .\dist
 rsync233 -a --delete --exclude "*.tmp" .\public\ .\dist
 rsync233 -a --delete --delete-excluded --exclude "cache/" .\public\ .\dist
+rsync233 -r -p .\scripts\ .\bin
 rsync233 -a --include "*.html" --exclude "*.tmp" .\public\ .\dist
 rsync233 -a --update --size-only .\public\ .\dist
 rsync233 -a --dry-run .\public\ ssh://deploy@example.com/var/www/
