@@ -35,13 +35,14 @@ func run(args []string, stdout, stderr io.Writer) error {
 	var checksum bool
 	var quiet bool
 
-	fs.BoolVar(&opts.Archive, "a", true, "archive mode: copy mode and modification time")
-	fs.BoolVar(&opts.Archive, "archive", true, "archive mode: copy mode and modification time")
+	fs.BoolVar(&opts.Archive, "a", false, "archive mode: recurse and copy mode, modification time, and symlinks")
+	fs.BoolVar(&opts.Archive, "archive", false, "archive mode: recurse and copy mode, modification time, and symlinks")
 	fs.BoolVar(&opts.Recursive, "r", false, "recurse into directories")
 	fs.BoolVar(&opts.Recursive, "recursive", false, "recurse into directories")
 	fs.BoolVar(&opts.Links, "l", false, "copy symlinks as symlinks")
 	fs.BoolVar(&opts.Links, "links", false, "copy symlinks as symlinks")
 	fs.BoolVar(&opts.Delete, "delete", false, "delete destination files not present in source")
+	fs.BoolVar(&opts.DeleteExcluded, "delete-excluded", false, "also delete excluded destination files when --delete is enabled")
 	fs.BoolVar(&opts.DryRun, "n", false, "show changes without writing")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "show changes without writing")
 	fs.BoolVar(&opts.Check, "check", false, "exit 2 when destination differs")

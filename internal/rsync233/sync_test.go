@@ -67,6 +67,31 @@ func TestSyncDeleteAndExclude(t *testing.T) {
 	assertFile(t, filepath.Join(dst, "keep.txt"), "keep")
 }
 
+func TestDeleteExcludedRemovesExcludedDestinationEntries(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "keep.txt"), "keep")
+	mustWrite(t, filepath.Join(src, "cache", "ignored.tmp"), "ignore")
+	mustWrite(t, filepath.Join(dst, "cache", "ignored.tmp"), "old")
+
+	summary, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{
+		Archive:        true,
+		Delete:         true,
+		DeleteExcluded: true,
+		Excludes:       []string{"cache/"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.DeletedEntries != 2 {
+		t.Fatalf("deleted entries = %d, want 2", summary.DeletedEntries)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "cache")); !os.IsNotExist(err) {
+		t.Fatalf("excluded cache should be deleted: %v", err)
+	}
+}
+
 func TestCheckReportsDifferenceWithoutWriting(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "src")

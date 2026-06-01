@@ -19,6 +19,7 @@ type Options struct {
 	Archive        bool
 	Recursive      bool
 	Delete         bool
+	DeleteExcluded bool
 	DryRun         bool
 	Check          bool
 	Checksum       bool
@@ -366,7 +367,10 @@ func deleteExtraneous(ctx context.Context, dst FileSystem, dstRoot string, remot
 			return err
 		}
 		rel = normalizeRel(rel)
-		if rel == "." || filter.Exclude(rel, info.IsDir) {
+		if rel == "." {
+			return nil
+		}
+		if filter.Exclude(rel, info.IsDir) && !opts.DeleteExcluded {
 			return nil
 		}
 		if _, ok := sourceIndex[rel]; !ok {

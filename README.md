@@ -19,7 +19,7 @@ Supported release targets. In Go target names, `amd64` is the x86_64 build:
 - rsync-style source trailing slash behavior.
 - Archive/link mode preserves symbolic links as links.
 - Incremental copy by file size and modification time, with optional SHA-256 checksum comparison.
-- `--delete`, `--dry-run`, `--check`, `--include`, and repeatable `--exclude` rules.
+- `--delete`, `--delete-excluded`, `--dry-run`, `--check`, `--include`, and repeatable `--exclude` rules.
 - Common rsync transfer controls: `--ignore-times`, `--size-only`,
   `--ignore-existing`, `--existing`, and `--update`.
 - Importable Go API through `internal/rsync233` for repo-local extension.
@@ -39,12 +39,13 @@ rsync233 [options] SOURCE DEST
 Examples:
 
 ```powershell
-rsync233 .\public\ .\dist
-rsync233 --delete --exclude "*.tmp" .\public\ .\dist
-rsync233 --include "*.html" --exclude "*.tmp" .\public\ .\dist
-rsync233 --update --size-only .\public\ .\dist
-rsync233 --dry-run .\public\ ssh://deploy@example.com/var/www/
-rsync233 --check -c .\public\ deploy@example.com:/var/www/
+rsync233 -a .\public\ .\dist
+rsync233 -a --delete --exclude "*.tmp" .\public\ .\dist
+rsync233 -a --delete --delete-excluded --exclude "cache/" .\public\ .\dist
+rsync233 -a --include "*.html" --exclude "*.tmp" .\public\ .\dist
+rsync233 -a --update --size-only .\public\ .\dist
+rsync233 -a --dry-run .\public\ ssh://deploy@example.com/var/www/
+rsync233 -a --check -c .\public\ deploy@example.com:/var/www/
 ```
 
 Source trailing slash matches rsync behavior:
