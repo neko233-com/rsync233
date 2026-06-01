@@ -37,6 +37,7 @@ type Options struct {
 	Progress       bool
 	Includes       []string
 	Excludes       []string
+	FilterRules    []FilterRule
 	Logger         *slog.Logger
 }
 
@@ -82,7 +83,7 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 		dstRoot = joinPath(dstEP.IsRemote(), dstRoot, endpointBase(srcRoot))
 	}
 
-	filter := NewFilter(opts.Includes, opts.Excludes)
+	filter := buildFilter(opts)
 	sourceIndex := map[string]FileInfo{}
 
 	err = srcFS.Walk(ctx, srcRoot, func(srcPath string, info FileInfo, walkErr error) error {
@@ -165,6 +166,21 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 	}
 
 	return summary, nil
+}
+
+func buildFilter(opts Options) Filter {
+	if len(opts.FilterRules) > 0 {
+		rules := make([]FilterRule, 0, len(opts.FilterRules)+len(opts.Includes)+len(opts.Excludes))
+		rules = append(rules, opts.FilterRules...)
+		for _, p := range opts.Includes {
+			rules = append(rules, FilterRule{Include: true, Pattern: p})
+		}
+		for _, p := range opts.Excludes {
+			rules = append(rules, FilterRule{Include: false, Pattern: p})
+		}
+		return NewOrderedFilter(rules)
+	}
+	return NewFilter(opts.Includes, opts.Excludes)
 }
 
 func ensureDir(ctx context.Context, dst FileSystem, dstPath string, mode fs.FileMode, opts Options) (bool, error) {

@@ -42,6 +42,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 	var opts rsync233.Options
 	var includes multiValue
 	var excludes multiValue
+	var includeFrom multiValue
+	var excludeFrom multiValue
+	var filters multiValue
 	var checksum bool
 	var quiet bool
 
@@ -77,6 +80,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs.BoolVar(&quiet, "quiet", false, "suppress normal output")
 	fs.Var(&includes, "include", "include path pattern before exclude checks; may be repeated")
 	fs.Var(&excludes, "exclude", "exclude path pattern; may be repeated")
+	fs.Var(&includeFrom, "include-from", "read include patterns from file; may be repeated")
+	fs.Var(&excludeFrom, "exclude-from", "read exclude patterns from file; may be repeated")
+	fs.Var(&filters, "f", "rsync-style filter rule such as '+ *.go' or '- cache/'; may be repeated")
+	fs.Var(&filters, "filter", "rsync-style filter rule such as '+ *.go' or '- cache/'; may be repeated")
 
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: rsync233 [options] SOURCE DEST")
@@ -96,8 +103,21 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 
 	opts.Checksum = checksum
-	opts.Includes = includes
-	opts.Excludes = excludes
+	fileIncludes, err := readPatternFiles(includeFrom)
+	if err != nil {
+		return err
+	}
+	fileExcludes, err := readPatternFiles(excludeFrom)
+	if err != nil {
+		return err
+	}
+	filterRules, err := parseFilterRules(filters)
+	if err != nil {
+		return err
+	}
+	opts.Includes = append(includes, fileIncludes...)
+	opts.Excludes = append(excludes, fileExcludes...)
+	opts.FilterRules = filterRules
 	if quiet {
 		opts.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	} else {
@@ -126,4 +146,60 @@ func (m *multiValue) String() string {
 func (m *multiValue) Set(v string) error {
 	*m = append(*m, v)
 	return nil
+}
+
+func readPatternFiles(paths []string) ([]string, error) {
+	var out []string
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return nil, fmt.Errorf("read pattern file %s: %w", p, err)
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			out = append(out, line)
+		}
+	}
+	return out, nil
+}
+
+func parseFilterRules(values []string) ([]rsync233.FilterRule, error) {
+	rules := make([]rsync233.FilterRule, 0, len(values))
+	for _, raw := range values {
+		include, pattern, err := parseFilterRule(raw)
+		if err != nil {
+			return nil, err
+		}
+		rules = append(rules, rsync233.FilterRule{Include: include, Pattern: pattern})
+	}
+	return rules, nil
+}
+
+func parseFilterRule(raw string) (bool, string, error) {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return false, "", fmt.Errorf("empty filter rule")
+	}
+	for _, prefix := range []string{"+ ", "include "} {
+		if strings.HasPrefix(v, prefix) {
+			p := strings.TrimSpace(strings.TrimPrefix(v, prefix))
+			if p == "" {
+				return false, "", fmt.Errorf("empty include filter pattern")
+			}
+			return true, p, nil
+		}
+	}
+	for _, prefix := range []string{"- ", "exclude "} {
+		if strings.HasPrefix(v, prefix) {
+			p := strings.TrimSpace(strings.TrimPrefix(v, prefix))
+			if p == "" {
+				return false, "", fmt.Errorf("empty exclude filter pattern")
+			}
+			return false, p, nil
+		}
+	}
+	return false, "", fmt.Errorf("unsupported filter rule %q; use '+ pattern' or '- pattern'", raw)
 }

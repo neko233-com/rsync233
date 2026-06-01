@@ -21,7 +21,8 @@ Supported release targets. In Go target names, `amd64` is the x86_64 build:
 - `-p`/`--perms` preserves permission bits; `--no-perms` disables permission preservation in archive mode.
 - `-t`/`--times` preserves modification times; `--no-times` disables time preservation in archive mode.
 - Incremental copy by file size and modification time, with optional SHA-256 checksum comparison.
-- `--delete`, `--delete-excluded`, `--dry-run`, `--check`, `--include`, and repeatable `--exclude` rules.
+- `--delete`, `--delete-excluded`, `--dry-run`, `--check`, `--include`,
+  `--exclude`, `--include-from`, `--exclude-from`, and basic `-f` filter rules.
 - Common rsync transfer controls: `--ignore-times`, `--size-only`,
   `--ignore-existing`, `--existing`, and `--update`.
 - Importable Go API through `internal/rsync233` for repo-local extension.
@@ -91,6 +92,8 @@ rsync233 -a --delete --delete-excluded --exclude "cache/" .\public\ .\dist
 rsync233 -r -p .\scripts\ .\bin
 rsync233 -r -t .\assets\ .\published-assets
 rsync233 -a --include "*.html" --exclude "*.tmp" .\public\ .\dist
+rsync233 -a --exclude-from .\rsync-excludes.txt .\public\ .\dist
+rsync233 -a -f "+ keep.txt" -f "- *.txt" .\public\ .\dist
 rsync233 -a --update --size-only .\public\ .\dist
 rsync233 -a --dry-run .\public\ ssh://deploy@example.com/var/www/
 rsync233 -a --check -c .\public\ deploy@example.com:/var/www/

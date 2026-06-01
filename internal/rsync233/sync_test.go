@@ -334,6 +334,34 @@ func TestIncludeOverridesExclude(t *testing.T) {
 	}
 }
 
+func TestOrderedFilterRulesUseFirstMatch(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "keep.txt"), "keep")
+	mustWrite(t, filepath.Join(src, "drop.txt"), "drop")
+	mustWrite(t, filepath.Join(src, "drop.log"), "drop")
+
+	_, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{
+		Archive: true,
+		FilterRules: []FilterRule{
+			{Include: true, Pattern: "keep.txt"},
+			{Include: false, Pattern: "*.txt"},
+			{Include: false, Pattern: "*.log"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, filepath.Join(dst, "keep.txt"), "keep")
+	if _, err := os.Stat(filepath.Join(dst, "drop.txt")); !os.IsNotExist(err) {
+		t.Fatalf("drop.txt should be excluded: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "drop.log")); !os.IsNotExist(err) {
+		t.Fatalf("drop.log should be excluded: %v", err)
+	}
+}
+
 func TestArchivePreservesSymlink(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "src")

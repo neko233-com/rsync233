@@ -10,8 +10,12 @@ type Excluder struct {
 }
 
 type Filter struct {
-	includes Excluder
-	excludes Excluder
+	rules []FilterRule
+}
+
+type FilterRule struct {
+	Include bool
+	Pattern string
 }
 
 func NewExcluder(patterns []string) Excluder {
@@ -26,17 +30,41 @@ func NewExcluder(patterns []string) Excluder {
 }
 
 func NewFilter(includes, excludes []string) Filter {
-	return Filter{
-		includes: NewExcluder(includes),
-		excludes: NewExcluder(excludes),
+	rules := make([]FilterRule, 0, len(includes)+len(excludes))
+	for _, p := range includes {
+		p = strings.TrimSpace(filepathToSlash(p))
+		if p != "" {
+			rules = append(rules, FilterRule{Include: true, Pattern: p})
+		}
 	}
+	for _, p := range excludes {
+		p = strings.TrimSpace(filepathToSlash(p))
+		if p != "" {
+			rules = append(rules, FilterRule{Include: false, Pattern: p})
+		}
+	}
+	return NewOrderedFilter(rules)
+}
+
+func NewOrderedFilter(rules []FilterRule) Filter {
+	out := make([]FilterRule, 0, len(rules))
+	for _, r := range rules {
+		p := strings.TrimSpace(filepathToSlash(r.Pattern))
+		if p != "" {
+			r.Pattern = p
+			out = append(out, r)
+		}
+	}
+	return Filter{rules: out}
 }
 
 func (f Filter) Exclude(rel string, isDir bool) bool {
-	if f.includes.Match(rel, isDir) {
-		return false
+	for _, r := range f.rules {
+		if (Excluder{patterns: []string{r.Pattern}}).Match(rel, isDir) {
+			return !r.Include
+		}
 	}
-	return f.excludes.Match(rel, isDir)
+	return false
 }
 
 func (e Excluder) Match(rel string, isDir bool) bool {
