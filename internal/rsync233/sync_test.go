@@ -269,6 +269,50 @@ func TestNoPermsLeavesExistingModeInArchive(t *testing.T) {
 	assertFile(t, dstFile, "#!/bin/sh\necho new\n")
 }
 
+func TestPreserveTimesCopiesSourceModTime(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	srcFile := filepath.Join(src, "a.txt")
+	mustWrite(t, srcFile, "hello")
+	srcTime := time.Unix(1234, 0)
+	setModTime(t, srcFile, srcTime)
+
+	_, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{Recursive: true, PreserveTimes: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(dst, "a.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameModTime(info.ModTime(), srcTime) {
+		t.Fatalf("mtime = %s, want %s", info.ModTime(), srcTime)
+	}
+}
+
+func TestNoTimesDisablesArchiveModTimePreservation(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	srcFile := filepath.Join(src, "a.txt")
+	mustWrite(t, srcFile, "hello")
+	srcTime := time.Unix(1234, 0)
+	setModTime(t, srcFile, srcTime)
+
+	_, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{Archive: true, NoTimes: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(dst, "a.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sameModTime(info.ModTime(), srcTime) {
+		t.Fatalf("mtime = %s, should not match source %s", info.ModTime(), srcTime)
+	}
+}
+
 func TestIncludeOverridesExclude(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "src")

@@ -26,6 +26,8 @@ type Options struct {
 	Links          bool
 	PreservePerms  bool
 	NoPerms        bool
+	PreserveTimes  bool
+	NoTimes        bool
 	IgnoreTimes    bool
 	SizeOnly       bool
 	IgnoreExisting bool
@@ -243,7 +245,7 @@ func syncFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath string,
 	if err := copyFile(ctx, src, dst, srcPath, dstPath, fileCreateMode(srcInfo.Mode, opts)); err != nil {
 		return false, false, 0, err
 	}
-	if opts.Archive {
+	if preserveTimes(opts) {
 		_ = dst.Chtimes(ctx, dstPath, srcInfo.ModTime)
 	}
 	if preservePerms(opts) {
@@ -359,6 +361,10 @@ func sameModTime(a, b time.Time) bool {
 
 func preservePerms(opts Options) bool {
 	return (opts.Archive || opts.PreservePerms) && !opts.NoPerms
+}
+
+func preserveTimes(opts Options) bool {
+	return (opts.Archive || opts.PreserveTimes) && !opts.NoTimes
 }
 
 func fileCreateMode(mode fs.FileMode, opts Options) fs.FileMode {
