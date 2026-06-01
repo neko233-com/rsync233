@@ -60,6 +60,8 @@ jobs:
         run: go vet ./...
 
       - name: Test
+        env:
+          CGO_ENABLED: '1'
         run: go test -v -race -count=1 ./...
 
       - name: Build
@@ -110,4 +112,3 @@ jobs:
         run: |
           mkdir -p dist
           go build -trimpath -ldflags="-s -w" -o "dist/${APP_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ${APP_PACKAGE}
-

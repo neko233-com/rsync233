@@ -16,15 +16,22 @@ import (
 var ErrDiffFound = errors.New("differences found")
 
 type Options struct {
-	Archive       bool
-	Delete        bool
-	DryRun        bool
-	Check         bool
-	Checksum      bool
-	PreserveOwner bool
-	Progress      bool
-	Excludes      []string
-	Logger        *slog.Logger
+	Archive        bool
+	Recursive      bool
+	Delete         bool
+	DryRun         bool
+	Check          bool
+	Checksum       bool
+	IgnoreTimes    bool
+	SizeOnly       bool
+	IgnoreExisting bool
+	Existing       bool
+	Update         bool
+	PreserveOwner  bool
+	Progress       bool
+	Includes       []string
+	Excludes       []string
+	Logger         *slog.Logger
 }
 
 func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary, error) {
@@ -62,11 +69,14 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 	if err != nil {
 		return summary, fmt.Errorf("stat source: %w", err)
 	}
+	if srcInfo.IsDir && !opts.Archive && !opts.Recursive {
+		return summary, fmt.Errorf("skipping directory %s; use -r or -a to recurse", sourceRaw)
+	}
 	if srcInfo.IsDir && !srcEP.Trailing {
 		dstRoot = joinPath(dstEP.IsRemote(), dstRoot, endpointBase(srcRoot))
 	}
 
-	excluder := NewExcluder(opts.Excludes)
+	filter := NewFilter(opts.Includes, opts.Excludes)
 	sourceIndex := map[string]FileInfo{}
 
 	err = srcFS.Walk(ctx, srcRoot, func(srcPath string, info FileInfo, walkErr error) error {
@@ -78,7 +88,7 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 			return err
 		}
 		rel = normalizeRel(rel)
-		if excluder.Match(rel, info.IsDir) {
+		if filter.Exclude(rel, info.IsDir) {
 			summary.SkippedEntries++
 			if info.IsDir {
 				return fs.SkipDir
@@ -126,7 +136,7 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 	}
 
 	if opts.Delete {
-		deleted, err := deleteExtraneous(ctx, dstFS, dstRoot, dstEP.IsRemote(), sourceIndex, excluder, opts)
+		deleted, err := deleteExtraneous(ctx, dstFS, dstRoot, dstEP.IsRemote(), sourceIndex, filter, opts)
 		if err != nil {
 			return summary, err
 		}
@@ -161,18 +171,33 @@ func syncFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath string,
 	needsCopy := false
 	isCreate := false
 	if errors.Is(err, os.ErrNotExist) {
+		if opts.Existing {
+			return false, false, 0, nil
+		}
 		needsCopy = true
 		isCreate = true
 	} else if err != nil {
 		return false, false, 0, err
+	} else if opts.IgnoreExisting {
+		return false, false, 0, nil
+	} else if opts.Update && dstInfo.ModTime.After(srcInfo.ModTime) {
+		return false, false, 0, nil
+	} else if opts.IgnoreTimes {
+		needsCopy = true
+	} else if opts.SizeOnly {
+		needsCopy = dstInfo.Size != srcInfo.Size
+	} else if opts.Checksum {
+		if dstInfo.Size != srcInfo.Size {
+			needsCopy = true
+		} else {
+			equal, err := sameChecksum(ctx, src, dst, srcPath, dstPath)
+			if err != nil {
+				return false, false, 0, err
+			}
+			needsCopy = !equal
+		}
 	} else if dstInfo.Size != srcInfo.Size || !sameModTime(dstInfo.ModTime, srcInfo.ModTime) {
 		needsCopy = true
-	} else if opts.Checksum {
-		equal, err := sameChecksum(ctx, src, dst, srcPath, dstPath)
-		if err != nil {
-			return false, false, 0, err
-		}
-		needsCopy = !equal
 	}
 	if !needsCopy {
 		return false, false, 0, nil
@@ -259,7 +284,7 @@ func sameModTime(a, b time.Time) bool {
 	return d <= time.Second
 }
 
-func deleteExtraneous(ctx context.Context, dst FileSystem, dstRoot string, remote bool, sourceIndex map[string]FileInfo, excluder Excluder, opts Options) (int, error) {
+func deleteExtraneous(ctx context.Context, dst FileSystem, dstRoot string, remote bool, sourceIndex map[string]FileInfo, filter Filter, opts Options) (int, error) {
 	if _, err := dst.Stat(ctx, dstRoot); errors.Is(err, os.ErrNotExist) {
 		return 0, nil
 	}
@@ -273,7 +298,7 @@ func deleteExtraneous(ctx context.Context, dst FileSystem, dstRoot string, remot
 			return err
 		}
 		rel = normalizeRel(rel)
-		if rel == "." || excluder.Match(rel, info.IsDir) {
+		if rel == "." || filter.Exclude(rel, info.IsDir) {
 			return nil
 		}
 		if _, ok := sourceIndex[rel]; !ok {

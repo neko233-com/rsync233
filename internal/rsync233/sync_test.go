@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestSyncCopiesDirectoryContentsWithTrailingSlash(t *testing.T) {
@@ -83,12 +84,153 @@ func TestCheckReportsDifferenceWithoutWriting(t *testing.T) {
 	assertFile(t, filepath.Join(dst, "a.txt"), "old")
 }
 
+func TestChecksumComparesEqualSizeFilesEvenWhenTimesDiffer(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	srcFile := filepath.Join(src, "a.txt")
+	dstFile := filepath.Join(dst, "a.txt")
+	mustWrite(t, srcFile, "new")
+	mustWrite(t, dstFile, "old")
+	setModTime(t, srcFile, time.Unix(100, 0))
+	setModTime(t, dstFile, time.Unix(200, 0))
+
+	summary, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{Archive: true, Checksum: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.UpdatedFiles != 1 {
+		t.Fatalf("updated files = %d, want 1", summary.UpdatedFiles)
+	}
+	assertFile(t, dstFile, "new")
+}
+
+func TestIgnoreExistingSkipsReceiverFiles(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "a.txt"), "new")
+	mustWrite(t, filepath.Join(dst, "a.txt"), "old")
+
+	summary, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{Archive: true, IgnoreExisting: true, IgnoreTimes: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Changed() {
+		t.Fatalf("expected no changes, got %+v", summary)
+	}
+	assertFile(t, filepath.Join(dst, "a.txt"), "old")
+}
+
+func TestExistingSkipsNewReceiverFiles(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "new.txt"), "new")
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	summary, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{Archive: true, Existing: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Changed() {
+		t.Fatalf("expected no changes, got %+v", summary)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "new.txt")); !os.IsNotExist(err) {
+		t.Fatalf("new receiver file should be skipped: %v", err)
+	}
+}
+
+func TestUpdateSkipsNewerReceiverFile(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	srcFile := filepath.Join(src, "a.txt")
+	dstFile := filepath.Join(dst, "a.txt")
+	mustWrite(t, srcFile, "newer-source")
+	mustWrite(t, dstFile, "newer-dest")
+	setModTime(t, srcFile, time.Unix(100, 0))
+	setModTime(t, dstFile, time.Unix(200, 0))
+
+	summary, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{Archive: true, Update: true, IgnoreTimes: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Changed() {
+		t.Fatalf("expected no changes, got %+v", summary)
+	}
+	assertFile(t, dstFile, "newer-dest")
+}
+
+func TestSizeOnlySkipsMatchingSizeDespiteDifferentTimes(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	srcFile := filepath.Join(src, "a.txt")
+	dstFile := filepath.Join(dst, "a.txt")
+	mustWrite(t, srcFile, "abc")
+	mustWrite(t, dstFile, "xyz")
+	setModTime(t, srcFile, time.Unix(100, 0))
+	setModTime(t, dstFile, time.Unix(200, 0))
+
+	summary, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{Archive: true, SizeOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Changed() {
+		t.Fatalf("expected no changes, got %+v", summary)
+	}
+	assertFile(t, dstFile, "xyz")
+}
+
+func TestIncludeOverridesExclude(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "keep.txt"), "keep")
+	mustWrite(t, filepath.Join(src, "drop.log"), "drop")
+
+	_, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{
+		Archive:  true,
+		Includes: []string{"keep.txt"},
+		Excludes: []string{"*.txt", "*.log"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, filepath.Join(dst, "keep.txt"), "keep")
+	if _, err := os.Stat(filepath.Join(dst, "drop.log")); !os.IsNotExist(err) {
+		t.Fatalf("drop.log should be excluded: %v", err)
+	}
+}
+
+func TestDirectoryRequiresRecursiveOrArchive(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "a.txt"), "hello")
+
+	_, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{})
+	if err == nil {
+		t.Fatal("expected directory recursion error")
+	}
+}
+
 func mustWrite(t *testing.T, p, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func setModTime(t *testing.T, p string, ts time.Time) {
+	t.Helper()
+	if err := os.Chtimes(p, ts, ts); err != nil {
 		t.Fatal(err)
 	}
 }

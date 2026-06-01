@@ -9,6 +9,11 @@ type Excluder struct {
 	patterns []string
 }
 
+type Filter struct {
+	includes Excluder
+	excludes Excluder
+}
+
 func NewExcluder(patterns []string) Excluder {
 	out := make([]string, 0, len(patterns))
 	for _, p := range patterns {
@@ -18,6 +23,20 @@ func NewExcluder(patterns []string) Excluder {
 		}
 	}
 	return Excluder{patterns: out}
+}
+
+func NewFilter(includes, excludes []string) Filter {
+	return Filter{
+		includes: NewExcluder(includes),
+		excludes: NewExcluder(excludes),
+	}
+}
+
+func (f Filter) Exclude(rel string, isDir bool) bool {
+	if f.includes.Match(rel, isDir) {
+		return false
+	}
+	return f.excludes.Match(rel, isDir)
 }
 
 func (e Excluder) Match(rel string, isDir bool) bool {

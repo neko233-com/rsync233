@@ -30,22 +30,33 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 
 	var opts rsync233.Options
+	var includes multiValue
 	var excludes multiValue
 	var checksum bool
 	var quiet bool
 
 	fs.BoolVar(&opts.Archive, "a", true, "archive mode: copy mode and modification time")
 	fs.BoolVar(&opts.Archive, "archive", true, "archive mode: copy mode and modification time")
+	fs.BoolVar(&opts.Recursive, "r", false, "recurse into directories")
+	fs.BoolVar(&opts.Recursive, "recursive", false, "recurse into directories")
 	fs.BoolVar(&opts.Delete, "delete", false, "delete destination files not present in source")
 	fs.BoolVar(&opts.DryRun, "n", false, "show changes without writing")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "show changes without writing")
 	fs.BoolVar(&opts.Check, "check", false, "exit 2 when destination differs")
 	fs.BoolVar(&checksum, "c", false, "compare file checksums when size and time match")
 	fs.BoolVar(&checksum, "checksum", false, "compare file checksums when size and time match")
+	fs.BoolVar(&opts.IgnoreTimes, "I", false, "do not skip files that match size and modification time")
+	fs.BoolVar(&opts.IgnoreTimes, "ignore-times", false, "do not skip files that match size and modification time")
+	fs.BoolVar(&opts.SizeOnly, "size-only", false, "skip files that have matching size regardless of modification time")
+	fs.BoolVar(&opts.IgnoreExisting, "ignore-existing", false, "skip updating files that already exist on the receiver")
+	fs.BoolVar(&opts.Existing, "existing", false, "skip creating files that do not already exist on the receiver")
+	fs.BoolVar(&opts.Update, "u", false, "skip files that are newer on the receiver")
+	fs.BoolVar(&opts.Update, "update", false, "skip files that are newer on the receiver")
 	fs.BoolVar(&opts.PreserveOwner, "owner", false, "reserved for platforms that support ownership preservation")
 	fs.BoolVar(&opts.Progress, "progress", false, "reserved for progress output")
 	fs.BoolVar(&quiet, "q", false, "suppress normal output")
 	fs.BoolVar(&quiet, "quiet", false, "suppress normal output")
+	fs.Var(&includes, "include", "include path pattern before exclude checks; may be repeated")
 	fs.Var(&excludes, "exclude", "exclude path pattern; may be repeated")
 
 	fs.Usage = func() {
@@ -66,6 +77,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 
 	opts.Checksum = checksum
+	opts.Includes = includes
 	opts.Excludes = excludes
 	if quiet {
 		opts.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))

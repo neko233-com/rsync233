@@ -55,6 +55,8 @@ jobs:
         run: go vet ./...
 
       - name: Test
+        env:
+          CGO_ENABLED: '1'
         run: go test -v -race -count=1 ./...
 
       - name: Build
@@ -144,4 +146,3 @@ jobs:
           name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
