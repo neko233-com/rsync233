@@ -43,6 +43,16 @@ func TestRunArchiveRecursesIntoDirectories(t *testing.T) {
 	}
 }
 
+func TestRunVersionCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{"version"}, &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "rsync233 ") {
+		t.Fatalf("version output = %q", stdout.String())
+	}
+}
+
 func mustWrite(t *testing.T, p, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {

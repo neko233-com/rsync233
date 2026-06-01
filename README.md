@@ -28,8 +28,52 @@ Supported release targets. In Go target names, `amd64` is the x86_64 build:
 
 ## Install
 
+### One-Click Install
+
+macOS / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/neko233-com/rsync233/main/scripts/install.sh | sh
+```
+
+Install a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/neko233-com/rsync233/main/scripts/install.sh | sh -s -- v0.1.0
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/neko233-com/rsync233/main/scripts/install.ps1 | iex
+```
+
+Windows CMD:
+
+```cmd
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/neko233-com/rsync233/main/scripts/install.ps1 | iex"
+```
+
+Install a specific version on Windows:
+
+```powershell
+irm https://raw.githubusercontent.com/neko233-com/rsync233/main/scripts/install.ps1 -OutFile $env:TEMP\rsync233-install.ps1
+& $env:TEMP\rsync233-install.ps1 v0.1.0
+```
+
+### From Source
+
 ```powershell
 go install github.com/neko233-com/rsync233/cmd/rsync233@latest
+```
+
+### Self Update
+
+```powershell
+rsync233 version
+rsync233 update --check
+rsync233 update -y
+rsync233 update --version v0.1.0
 ```
 
 ## Usage
@@ -72,6 +116,7 @@ Remote endpoints require SSH public-key authentication and a valid
 - `verify-actions.cmd` validates the GitHub Actions workflows with Node.js 24 LTS tooling.
 - `deploy.cmd` creates all supported release binaries under `dist/`.
 - `git-push.cmd` runs `test.cmd`, commits pending changes, and pushes `main`.
+- `scripts/install.sh` and `scripts/install.ps1` install release binaries on macOS/Linux and Windows.
 
 ## GitHub Actions
 
@@ -81,6 +126,7 @@ The repository follows the same CI/release shape as `neko233-com/unicli`:
 - `.github/workflows/release.yml` runs on `v*` tags, builds release binaries, uploads artifacts, generates checksums, and creates a GitHub Release.
 - Both workflows set up Node.js 24 LTS and Go 1.26.
 - Both workflows verify formatting, `go mod tidy`, `go vet`, race-enabled tests, local build, workflow structure, and the six-platform build matrix.
+- Release builds inject the tag into `rsync233 version`; `rsync233 update` downloads matching release assets from GitHub.
 
 ## Exit Codes
 

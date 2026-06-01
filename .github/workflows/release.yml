@@ -13,6 +13,7 @@ env:
   NODE_VERSION: '24'
   APP_NAME: rsync233
   APP_PACKAGE: ./cmd/rsync233
+  VERSION_LDFLAGS: -X main.version=${{ github.ref_name }}
   CGO_ENABLED: '0'
 
 jobs:
@@ -60,7 +61,7 @@ jobs:
         run: go test -v -race -count=1 ./...
 
       - name: Build
-        run: go build -trimpath -v -o /tmp/${APP_NAME} ${APP_PACKAGE}
+        run: go build -trimpath -ldflags="${VERSION_LDFLAGS}" -v -o /tmp/${APP_NAME} ${APP_PACKAGE}
 
       - name: Validate workflows
         run: npm ci && npm run verify:workflows
@@ -106,7 +107,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags="-s -w" -o "dist/${APP_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ${APP_PACKAGE}
+          go build -trimpath -ldflags="-s -w ${VERSION_LDFLAGS}" -o "dist/${APP_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ${APP_PACKAGE}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6

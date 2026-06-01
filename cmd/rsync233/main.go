@@ -26,6 +26,16 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "version", "--version", "-version":
+			runVersion(stdout)
+			return nil
+		case "update":
+			return runUpdateCommand(args[1:], stdout, stderr)
+		}
+	}
+
 	fs := flag.NewFlagSet("rsync233", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
