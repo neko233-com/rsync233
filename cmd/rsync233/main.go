@@ -64,6 +64,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs.BoolVar(&opts.PreserveTimes, "times", false, "preserve modification times")
 	fs.BoolVar(&opts.NoTimes, "no-times", false, "do not preserve modification times, even in archive mode")
 	fs.BoolVar(&opts.Delete, "delete", false, "delete destination files not present in source")
+	fs.BoolVar(&opts.DeleteBefore, "delete-before", false, "delete destination files before transferring")
+	fs.BoolVar(&opts.DeleteDuring, "delete-during", false, "accept rsync delete-during mode; currently deletes after the transfer scan")
+	fs.BoolVar(&opts.DeleteAfter, "delete-after", false, "delete destination files after transferring")
 	fs.BoolVar(&opts.DeleteExcluded, "delete-excluded", false, "also delete excluded destination files when --delete is enabled")
 	fs.BoolVar(&opts.DryRun, "n", false, "show changes without writing")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "show changes without writing")
@@ -109,6 +112,15 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 
 	opts.Checksum = checksum
+	if opts.DeleteBefore || opts.DeleteDuring || opts.DeleteAfter {
+		opts.Delete = true
+	}
+	if opts.DeleteBefore && (opts.DeleteDuring || opts.DeleteAfter) {
+		return fmt.Errorf("--delete-before cannot be combined with --delete-during or --delete-after")
+	}
+	if opts.DeleteDuring && opts.DeleteAfter {
+		return fmt.Errorf("--delete-during cannot be combined with --delete-after")
+	}
 	opts.MinSize = int64(minSize)
 	opts.MaxSize = int64(maxSize)
 	fileIncludes, err := readPatternFiles(includeFrom)

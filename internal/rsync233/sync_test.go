@@ -93,6 +93,43 @@ func TestDeleteExcludedRemovesExcludedDestinationEntries(t *testing.T) {
 	}
 }
 
+func TestDeleteBeforeRemovesConflictingDestinationBeforeTransfer(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "conflict", "file.txt"), "new")
+	mustWrite(t, filepath.Join(dst, "conflict"), "old-file")
+
+	summary, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{
+		Archive:      true,
+		Delete:       true,
+		DeleteBefore: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.DeletedEntries != 1 || summary.CopiedFiles != 1 {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
+	assertFile(t, filepath.Join(dst, "conflict", "file.txt"), "new")
+}
+
+func TestDeleteAfterReportsConflictingDestination(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "conflict", "file.txt"), "new")
+	mustWrite(t, filepath.Join(dst, "conflict"), "old-file")
+
+	_, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{
+		Archive: true,
+		Delete:  true,
+	})
+	if err == nil {
+		t.Fatal("expected conflict before delete-after runs")
+	}
+}
+
 func TestCheckReportsDifferenceWithoutWriting(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "src")

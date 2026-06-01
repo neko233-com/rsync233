@@ -140,6 +140,29 @@ func TestRunIgnoreMissingArgs(t *testing.T) {
 	}
 }
 
+func TestRunDeleteBefore(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "conflict", "file.txt"), "new")
+	mustWrite(t, filepath.Join(dst, "conflict"), "old-file")
+
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{"-a", "--delete-before", src + string(os.PathSeparator), dst}, &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, filepath.Join(dst, "conflict", "file.txt"), "new")
+}
+
+func TestRunRejectsConflictingDeleteModes(t *testing.T) {
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"--delete-before", "--delete-after", filepath.Join(root, "src"), filepath.Join(root, "dst")}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected conflicting delete mode error")
+	}
+}
+
 func TestParseSize(t *testing.T) {
 	tests := map[string]int64{
 		"42":  42,

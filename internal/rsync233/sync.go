@@ -20,6 +20,9 @@ type Options struct {
 	Recursive         bool
 	Delete            bool
 	DeleteExcluded    bool
+	DeleteBefore      bool
+	DeleteDuring      bool
+	DeleteAfter       bool
 	DryRun            bool
 	Check             bool
 	Checksum          bool
@@ -91,13 +94,55 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 	}
 
 	filter := buildFilter(opts)
-	sourceIndex := map[string]FileInfo{}
+	entries, sourceIndex, scanSummary, err := scanSource(ctx, srcFS, srcEP.IsRemote(), srcRoot, filter, opts)
+	if err != nil {
+		return summary, err
+	}
+	summary.ScannedDirs += scanSummary.ScannedDirs
+	summary.ScannedFiles += scanSummary.ScannedFiles
+	summary.SkippedEntries += scanSummary.SkippedEntries
 
-	err = srcFS.Walk(ctx, srcRoot, func(srcPath string, info FileInfo, walkErr error) error {
+	if deleteEnabled(opts) && opts.DeleteBefore {
+		deleted, err := deleteExtraneous(ctx, dstFS, dstRoot, dstEP.IsRemote(), sourceIndex, filter, opts)
+		if err != nil {
+			return summary, err
+		}
+		summary.DeletedEntries += deleted
+	}
+
+	for _, entry := range entries {
+		if err := syncEntry(ctx, srcFS, dstFS, dstEP.IsRemote(), dstRoot, entry, opts, &summary); err != nil {
+			return summary, err
+		}
+	}
+
+	if deleteEnabled(opts) && !opts.DeleteBefore {
+		deleted, err := deleteExtraneous(ctx, dstFS, dstRoot, dstEP.IsRemote(), sourceIndex, filter, opts)
+		if err != nil {
+			return summary, err
+		}
+		summary.DeletedEntries += deleted
+	}
+
+	return summary, nil
+}
+
+type sourceEntry struct {
+	Path string
+	Rel  string
+	Info FileInfo
+}
+
+func scanSource(ctx context.Context, src FileSystem, remote bool, root string, filter Filter, opts Options) ([]sourceEntry, map[string]FileInfo, Summary, error) {
+	var entries []sourceEntry
+	sourceIndex := map[string]FileInfo{}
+	var summary Summary
+
+	err := src.Walk(ctx, root, func(srcPath string, info FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		rel, err := relPath(srcEP.IsRemote(), srcRoot, srcPath)
+		rel, err := relPath(remote, root, srcPath)
 		if err != nil {
 			return err
 		}
@@ -119,64 +164,60 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 			summary.SkippedEntries++
 			return nil
 		}
-		dstPath := dstRoot
-		if rel != "." {
-			dstPath = joinPath(dstEP.IsRemote(), dstRoot, rel)
-		}
-		if info.IsSymlink {
-			copied, updated, err := syncSymlink(ctx, srcFS, dstFS, srcPath, dstPath, opts)
-			if err != nil {
-				return err
-			}
-			if copied {
-				summary.CopiedFiles++
-				opts.Logger.Info("symlink", "path", dstPath)
-			}
-			if updated {
-				summary.UpdatedFiles++
-				opts.Logger.Info("symlink-update", "path", dstPath)
-			}
-			return nil
-		}
-		if info.IsDir {
-			created, err := ensureDir(ctx, dstFS, dstPath, info.Mode, opts)
-			if err != nil {
-				return err
-			}
-			if created {
-				summary.CreatedDirs++
-				opts.Logger.Info("mkdir", "path", dstPath)
-			}
-			return nil
-		}
-		copied, updated, bytesCopied, err := syncFile(ctx, srcFS, dstFS, srcPath, dstPath, info, opts)
+		entries = append(entries, sourceEntry{Path: srcPath, Rel: rel, Info: info})
+		return nil
+	})
+	if err != nil {
+		return nil, nil, summary, err
+	}
+	return entries, sourceIndex, summary, nil
+}
+
+func syncEntry(ctx context.Context, srcFS, dstFS FileSystem, dstRemote bool, dstRoot string, entry sourceEntry, opts Options, summary *Summary) error {
+	dstPath := dstRoot
+	if entry.Rel != "." {
+		dstPath = joinPath(dstRemote, dstRoot, entry.Rel)
+	}
+	if entry.Info.IsSymlink {
+		copied, updated, err := syncSymlink(ctx, srcFS, dstFS, entry.Path, dstPath, opts)
 		if err != nil {
 			return err
 		}
 		if copied {
 			summary.CopiedFiles++
-			opts.Logger.Info("copy", "path", dstPath)
+			opts.Logger.Info("symlink", "path", dstPath)
 		}
 		if updated {
 			summary.UpdatedFiles++
-			opts.Logger.Info("update", "path", dstPath)
+			opts.Logger.Info("symlink-update", "path", dstPath)
 		}
-		summary.BytesCopied += bytesCopied
 		return nil
-	})
-	if err != nil {
-		return summary, err
 	}
-
-	if opts.Delete {
-		deleted, err := deleteExtraneous(ctx, dstFS, dstRoot, dstEP.IsRemote(), sourceIndex, filter, opts)
+	if entry.Info.IsDir {
+		created, err := ensureDir(ctx, dstFS, dstPath, entry.Info.Mode, opts)
 		if err != nil {
-			return summary, err
+			return err
 		}
-		summary.DeletedEntries += deleted
+		if created {
+			summary.CreatedDirs++
+			opts.Logger.Info("mkdir", "path", dstPath)
+		}
+		return nil
 	}
-
-	return summary, nil
+	copied, updated, bytesCopied, err := syncFile(ctx, srcFS, dstFS, entry.Path, dstPath, entry.Info, opts)
+	if err != nil {
+		return err
+	}
+	if copied {
+		summary.CopiedFiles++
+		opts.Logger.Info("copy", "path", dstPath)
+	}
+	if updated {
+		summary.UpdatedFiles++
+		opts.Logger.Info("update", "path", dstPath)
+	}
+	summary.BytesCopied += bytesCopied
+	return nil
 }
 
 func skipBySize(info FileInfo, opts Options) bool {
@@ -187,6 +228,10 @@ func skipBySize(info FileInfo, opts Options) bool {
 		return true
 	}
 	return false
+}
+
+func deleteEnabled(opts Options) bool {
+	return opts.Delete || opts.DeleteBefore || opts.DeleteDuring || opts.DeleteAfter
 }
 
 func buildFilter(opts Options) Filter {
@@ -438,7 +483,8 @@ func deleteExtraneous(ctx context.Context, dst FileSystem, dstRoot string, remot
 		if filter.Exclude(rel, info.IsDir) && !opts.DeleteExcluded {
 			return nil
 		}
-		if _, ok := sourceIndex[rel]; !ok {
+		srcInfo, ok := sourceIndex[rel]
+		if !ok || sourceTypeConflict(srcInfo, info) {
 			info.Path = p
 			entries = append(entries, info)
 		}
@@ -470,4 +516,14 @@ func deleteExtraneous(ctx context.Context, dst FileSystem, dstRoot string, remot
 		opts.Logger.Info("delete", "path", entry.Path)
 	}
 	return deleted, nil
+}
+
+func sourceTypeConflict(src, dst FileInfo) bool {
+	if src.IsDir != dst.IsDir {
+		return true
+	}
+	if src.IsSymlink != dst.IsSymlink {
+		return true
+	}
+	return false
 }

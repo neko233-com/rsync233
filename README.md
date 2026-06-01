@@ -21,7 +21,8 @@ Supported release targets. In Go target names, `amd64` is the x86_64 build:
 - `-p`/`--perms` preserves permission bits; `--no-perms` disables permission preservation in archive mode.
 - `-t`/`--times` preserves modification times; `--no-times` disables time preservation in archive mode.
 - Incremental copy by file size and modification time, with optional SHA-256 checksum comparison.
-- `--delete`, `--delete-excluded`, `--dry-run`, `--check`, `--include`,
+- `--delete`, `--delete-before`, `--delete-after`, `--delete-during`,
+  `--delete-excluded`, `--dry-run`, `--check`, `--include`,
   `--exclude`, `--include-from`, `--exclude-from`, and basic `-f` filter rules.
 - Common rsync transfer controls: `--ignore-times`, `--size-only`,
   `--ignore-existing`, `--existing`, `--update`, `--ignore-missing-args`,
@@ -89,6 +90,7 @@ Examples:
 ```powershell
 rsync233 -a .\public\ .\dist
 rsync233 -a --delete --exclude "*.tmp" .\public\ .\dist
+rsync233 -a --delete-before .\public\ .\dist
 rsync233 -a --delete --delete-excluded --exclude "cache/" .\public\ .\dist
 rsync233 -r -p .\scripts\ .\bin
 rsync233 -r -t .\assets\ .\published-assets
