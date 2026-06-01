@@ -12,7 +12,7 @@ import (
 type LocalFS struct{}
 
 func (LocalFS) Stat(_ context.Context, path string) (FileInfo, error) {
-	st, err := os.Stat(path)
+	st, err := os.Lstat(path)
 	if err != nil {
 		return FileInfo{}, err
 	}
@@ -32,6 +32,17 @@ func (LocalFS) OpenWrite(_ context.Context, path string, mode fs.FileMode) (io.W
 		return nil, err
 	}
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+}
+
+func (LocalFS) ReadLink(_ context.Context, path string) (string, error) {
+	return os.Readlink(path)
+}
+
+func (LocalFS) Symlink(_ context.Context, target, path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.Symlink(target, path)
 }
 
 func (LocalFS) Remove(_ context.Context, path string) error {
@@ -70,10 +81,11 @@ func (LocalFS) Close() error { return nil }
 
 func fileInfoFromOS(path string, st os.FileInfo) FileInfo {
 	return FileInfo{
-		Path:    path,
-		Mode:    st.Mode(),
-		Size:    st.Size(),
-		ModTime: st.ModTime(),
-		IsDir:   st.IsDir(),
+		Path:      path,
+		Mode:      st.Mode(),
+		Size:      st.Size(),
+		ModTime:   st.ModTime(),
+		IsDir:     st.IsDir(),
+		IsSymlink: st.Mode()&fs.ModeSymlink != 0,
 	}
 }

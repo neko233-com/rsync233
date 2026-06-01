@@ -17,6 +17,7 @@ Supported release targets. In Go target names, `amd64` is the x86_64 build:
 - Local-to-local sync on every Go-supported desktop/server platform.
 - SSH/SFTP endpoints for cross-machine sync without shelling out to rsync.
 - rsync-style source trailing slash behavior.
+- Archive/link mode preserves symbolic links as links.
 - Incremental copy by file size and modification time, with optional SHA-256 checksum comparison.
 - `--delete`, `--dry-run`, `--check`, `--include`, and repeatable `--exclude` rules.
 - Common rsync transfer controls: `--ignore-times`, `--size-only`,

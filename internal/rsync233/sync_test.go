@@ -206,6 +206,69 @@ func TestIncludeOverridesExclude(t *testing.T) {
 	}
 }
 
+func TestArchivePreservesSymlink(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "target.txt"), "target")
+	link := filepath.Join(src, "link.txt")
+	if err := os.Symlink("target.txt", link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	_, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{Archive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(filepath.Join(dst, "link.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("link.txt mode = %v, want symlink", info.Mode())
+	}
+	target, err := os.Readlink(filepath.Join(dst, "link.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target != "target.txt" {
+		t.Fatalf("link target = %q, want target.txt", target)
+	}
+}
+
+func TestLinksUpdatesExistingSymlink(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("new.txt", filepath.Join(src, "link.txt")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := os.Symlink("old.txt", filepath.Join(dst, "link.txt")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	summary, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{Recursive: true, Links: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.UpdatedFiles != 1 {
+		t.Fatalf("updated files = %d, want 1", summary.UpdatedFiles)
+	}
+	target, err := os.Readlink(filepath.Join(dst, "link.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target != "new.txt" {
+		t.Fatalf("link target = %q, want new.txt", target)
+	}
+}
+
 func TestDirectoryRequiresRecursiveOrArchive(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "src")

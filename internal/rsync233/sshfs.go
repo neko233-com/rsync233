@@ -118,11 +118,11 @@ func knownHostCallback() (ssh.HostKeyCallback, error) {
 }
 
 func (s *SFTPFS) Stat(_ context.Context, p string) (FileInfo, error) {
-	st, err := s.sftp.Stat(p)
+	st, err := s.sftp.Lstat(p)
 	if err != nil {
 		return FileInfo{}, normalizeSFTPErr(err)
 	}
-	return FileInfo{Path: p, Mode: st.Mode(), Size: st.Size(), ModTime: st.ModTime(), IsDir: st.IsDir()}, nil
+	return FileInfo{Path: p, Mode: st.Mode(), Size: st.Size(), ModTime: st.ModTime(), IsDir: st.IsDir(), IsSymlink: st.Mode()&fs.ModeSymlink != 0}, nil
 }
 
 func (s *SFTPFS) MkdirAll(_ context.Context, p string, mode fs.FileMode) error {
@@ -146,6 +146,17 @@ func (s *SFTPFS) OpenWrite(_ context.Context, p string, mode fs.FileMode) (io.Wr
 	}
 	_ = s.sftp.Chmod(p, mode)
 	return f, nil
+}
+
+func (s *SFTPFS) ReadLink(_ context.Context, p string) (string, error) {
+	return s.sftp.ReadLink(p)
+}
+
+func (s *SFTPFS) Symlink(_ context.Context, target, p string) error {
+	if err := s.sftp.MkdirAll(path.Dir(p)); err != nil {
+		return err
+	}
+	return s.sftp.Symlink(target, p)
 }
 
 func (s *SFTPFS) Remove(_ context.Context, p string) error {
@@ -177,7 +188,7 @@ func (s *SFTPFS) Walk(ctx context.Context, root string, fn WalkFunc) error {
 			continue
 		}
 		st := w.Stat()
-		if err := fn(w.Path(), FileInfo{Path: w.Path(), Mode: st.Mode(), Size: st.Size(), ModTime: st.ModTime(), IsDir: st.IsDir()}, nil); err != nil {
+		if err := fn(w.Path(), FileInfo{Path: w.Path(), Mode: st.Mode(), Size: st.Size(), ModTime: st.ModTime(), IsDir: st.IsDir(), IsSymlink: st.Mode()&fs.ModeSymlink != 0}, nil); err != nil {
 			return err
 		}
 	}

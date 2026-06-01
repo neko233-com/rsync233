@@ -39,6 +39,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs.BoolVar(&opts.Archive, "archive", true, "archive mode: copy mode and modification time")
 	fs.BoolVar(&opts.Recursive, "r", false, "recurse into directories")
 	fs.BoolVar(&opts.Recursive, "recursive", false, "recurse into directories")
+	fs.BoolVar(&opts.Links, "l", false, "copy symlinks as symlinks")
+	fs.BoolVar(&opts.Links, "links", false, "copy symlinks as symlinks")
 	fs.BoolVar(&opts.Delete, "delete", false, "delete destination files not present in source")
 	fs.BoolVar(&opts.DryRun, "n", false, "show changes without writing")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "show changes without writing")

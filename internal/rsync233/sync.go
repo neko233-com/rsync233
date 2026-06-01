@@ -22,6 +22,7 @@ type Options struct {
 	DryRun         bool
 	Check          bool
 	Checksum       bool
+	Links          bool
 	IgnoreTimes    bool
 	SizeOnly       bool
 	IgnoreExisting bool
@@ -105,6 +106,21 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 		if rel != "." {
 			dstPath = joinPath(dstEP.IsRemote(), dstRoot, rel)
 		}
+		if info.IsSymlink {
+			copied, updated, err := syncSymlink(ctx, srcFS, dstFS, srcPath, dstPath, opts)
+			if err != nil {
+				return err
+			}
+			if copied {
+				summary.CopiedFiles++
+				opts.Logger.Info("symlink", "path", dstPath)
+			}
+			if updated {
+				summary.UpdatedFiles++
+				opts.Logger.Info("symlink-update", "path", dstPath)
+			}
+			return nil
+		}
 		if info.IsDir {
 			created, err := ensureDir(ctx, dstFS, dstPath, info.Mode, opts)
 			if err != nil {
@@ -149,6 +165,9 @@ func Sync(ctx context.Context, sourceRaw, destRaw string, opts Options) (Summary
 func ensureDir(ctx context.Context, dst FileSystem, dstPath string, mode fs.FileMode, opts Options) (bool, error) {
 	_, err := dst.Stat(ctx, dstPath)
 	if err == nil {
+		if !infoIsDir(ctx, dst, dstPath) {
+			return false, fmt.Errorf("destination %s exists and is not a directory", dstPath)
+		}
 		if opts.Archive && !opts.DryRun {
 			_ = dst.Chmod(ctx, dstPath, mode.Perm())
 		}
@@ -161,6 +180,11 @@ func ensureDir(ctx context.Context, dst FileSystem, dstPath string, mode fs.File
 		return true, nil
 	}
 	return true, dst.MkdirAll(ctx, dstPath, mode.Perm())
+}
+
+func infoIsDir(ctx context.Context, fsys FileSystem, p string) bool {
+	info, err := fsys.Stat(ctx, p)
+	return err == nil && info.IsDir
 }
 
 func syncFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath string, srcInfo FileInfo, opts Options) (copied bool, updated bool, bytesCopied int64, err error) {
@@ -208,6 +232,11 @@ func syncFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath string,
 	if opts.DryRun {
 		return isCreate, !isCreate, 0, nil
 	}
+	if !isCreate && dstInfo.IsSymlink {
+		if err := dst.Remove(ctx, dstPath); err != nil {
+			return false, false, 0, err
+		}
+	}
 	if err := copyFile(ctx, src, dst, srcPath, dstPath, srcInfo.Mode.Perm()); err != nil {
 		return false, false, 0, err
 	}
@@ -216,6 +245,45 @@ func syncFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath string,
 		_ = dst.Chtimes(ctx, dstPath, srcInfo.ModTime)
 	}
 	return isCreate, !isCreate, srcInfo.Size, nil
+}
+
+func syncSymlink(ctx context.Context, src, dst FileSystem, srcPath, dstPath string, opts Options) (copied bool, updated bool, err error) {
+	if !opts.Archive && !opts.Links {
+		return false, false, nil
+	}
+	target, err := src.ReadLink(ctx, srcPath)
+	if err != nil {
+		return false, false, err
+	}
+	dstInfo, statErr := dst.Stat(ctx, dstPath)
+	isCreate := false
+	if errors.Is(statErr, os.ErrNotExist) {
+		isCreate = true
+	} else if statErr != nil {
+		return false, false, statErr
+	} else if dstInfo.IsSymlink {
+		current, err := dst.ReadLink(ctx, dstPath)
+		if err != nil {
+			return false, false, err
+		}
+		if current == target {
+			return false, false, nil
+		}
+	} else if dstInfo.IsDir {
+		return false, false, fmt.Errorf("destination %s is a directory", dstPath)
+	}
+	if opts.Check || opts.DryRun {
+		return isCreate, !isCreate, nil
+	}
+	if !isCreate {
+		if err := dst.Remove(ctx, dstPath); err != nil {
+			return false, false, err
+		}
+	}
+	if err := dst.Symlink(ctx, target, dstPath); err != nil {
+		return false, false, err
+	}
+	return isCreate, !isCreate, nil
 }
 
 func copyFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath string, mode fs.FileMode) error {
