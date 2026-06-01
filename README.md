@@ -19,6 +19,7 @@ Supported release targets. In Go target names, `amd64` is the x86_64 build:
 - rsync-style source trailing slash behavior.
 - Archive/link mode preserves symbolic links as links.
 - `-p`/`--perms` preserves permission bits; `--no-perms` disables permission preservation in archive mode.
+- `--chmod` applies octal permission adjustments such as `F=644,D=755`.
 - `-t`/`--times` preserves modification times; `--no-times` disables time preservation in archive mode.
 - Incremental copy by file size and modification time, with optional SHA-256 checksum comparison.
 - `--delete`, `--delete-before`, `--delete-after`, `--delete-during`,
@@ -96,6 +97,7 @@ rsync233 -a --delete-before .\public\ .\dist
 rsync233 -a --delete --delete-excluded --exclude "cache/" .\public\ .\dist
 rsync233 -a --backup --suffix ".bak" .\public\ .\dist
 rsync233 -a --delete --backup-dir .\rsync-backups .\public\ .\dist
+rsync233 -a --chmod "F=644,D=755" .\public\ .\dist
 rsync233 -r -p .\scripts\ .\bin
 rsync233 -r -t .\assets\ .\published-assets
 rsync233 -a --include "*.html" --exclude "*.tmp" .\public\ .\dist

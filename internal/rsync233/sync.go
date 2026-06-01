@@ -42,6 +42,7 @@ type Options struct {
 	Backup            bool
 	BackupDir         string
 	BackupSuffix      string
+	ChmodRules        []ChmodRule
 	PreserveOwner     bool
 	Progress          bool
 	Includes          []string
@@ -258,8 +259,11 @@ func ensureDir(ctx context.Context, dst FileSystem, dstPath string, mode fs.File
 		if !infoIsDir(ctx, dst, dstPath) {
 			return false, fmt.Errorf("destination %s exists and is not a directory", dstPath)
 		}
-		if preservePerms(opts) && !opts.DryRun {
-			_ = dst.Chmod(ctx, dstPath, mode.Perm())
+		if !opts.DryRun {
+			applyMode := destinationMode(mode.Perm(), true, opts)
+			if shouldApplyMode(true, opts) {
+				_ = dst.Chmod(ctx, dstPath, applyMode)
+			}
 		}
 		return false, nil
 	}
@@ -269,7 +273,14 @@ func ensureDir(ctx context.Context, dst FileSystem, dstPath string, mode fs.File
 	if opts.DryRun {
 		return true, nil
 	}
-	return true, dst.MkdirAll(ctx, dstPath, dirCreateMode(mode, opts))
+	createMode := destinationMode(dirCreateMode(mode, opts), true, opts)
+	if err := dst.MkdirAll(ctx, dstPath, createMode); err != nil {
+		return false, err
+	}
+	if shouldApplyMode(true, opts) {
+		_ = dst.Chmod(ctx, dstPath, createMode)
+	}
+	return true, nil
 }
 
 func infoIsDir(ctx context.Context, fsys FileSystem, p string) bool {
@@ -333,14 +344,15 @@ func syncFile(ctx context.Context, src, dst FileSystem, srcPath, dstPath, rel st
 			return false, false, 0, err
 		}
 	}
-	if err := copyFile(ctx, src, dst, srcPath, dstPath, fileCreateMode(srcInfo.Mode, opts)); err != nil {
+	fileMode := destinationMode(fileCreateMode(srcInfo.Mode, opts), false, opts)
+	if err := copyFile(ctx, src, dst, srcPath, dstPath, fileMode); err != nil {
 		return false, false, 0, err
 	}
 	if preserveTimes(opts) {
 		_ = dst.Chtimes(ctx, dstPath, srcInfo.ModTime)
 	}
-	if preservePerms(opts) {
-		_ = dst.Chmod(ctx, dstPath, srcInfo.Mode.Perm())
+	if shouldApplyMode(false, opts) {
+		_ = dst.Chmod(ctx, dstPath, fileMode)
 	}
 	return wasCreate, !wasCreate, srcInfo.Size, nil
 }
@@ -474,6 +486,64 @@ func dirCreateMode(mode fs.FileMode, opts Options) fs.FileMode {
 		return mode.Perm()
 	}
 	return 0o777
+}
+
+type ChmodRule struct {
+	Target ChmodTarget
+	Op     ChmodOp
+	Mode   fs.FileMode
+}
+
+type ChmodTarget int
+
+const (
+	ChmodAll ChmodTarget = iota
+	ChmodFiles
+	ChmodDirs
+)
+
+type ChmodOp byte
+
+const (
+	ChmodSet    ChmodOp = '='
+	ChmodAdd    ChmodOp = '+'
+	ChmodRemove ChmodOp = '-'
+)
+
+func shouldApplyMode(isDir bool, opts Options) bool {
+	return preservePerms(opts) || matchingChmodRules(isDir, opts.ChmodRules) > 0
+}
+
+func destinationMode(base fs.FileMode, isDir bool, opts Options) fs.FileMode {
+	mode := base.Perm()
+	for _, rule := range opts.ChmodRules {
+		if !chmodRuleApplies(rule, isDir) {
+			continue
+		}
+		switch rule.Op {
+		case ChmodSet:
+			mode = rule.Mode.Perm()
+		case ChmodAdd:
+			mode |= rule.Mode.Perm()
+		case ChmodRemove:
+			mode &^= rule.Mode.Perm()
+		}
+	}
+	return mode.Perm()
+}
+
+func matchingChmodRules(isDir bool, rules []ChmodRule) int {
+	count := 0
+	for _, rule := range rules {
+		if chmodRuleApplies(rule, isDir) {
+			count++
+		}
+	}
+	return count
+}
+
+func chmodRuleApplies(rule ChmodRule, isDir bool) bool {
+	return rule.Target == ChmodAll || (isDir && rule.Target == ChmodDirs) || (!isDir && rule.Target == ChmodFiles)
 }
 
 func deleteExtraneous(ctx context.Context, dst FileSystem, dstRoot string, remote bool, sourceIndex map[string]FileInfo, filter Filter, opts Options) (int, error) {

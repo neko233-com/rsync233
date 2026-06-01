@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/neko233-com/rsync233/internal/rsync233"
 )
 
 func TestRunDefaultDoesNotRecurseIntoDirectories(t *testing.T) {
@@ -183,6 +185,25 @@ func TestRunBackupDirImpliesBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFile(t, filepath.Join(backupDir, "old.txt"), "old")
+}
+
+func TestParseChmodRules(t *testing.T) {
+	rules, err := parseChmodRules([]string{"F=644,D=755", "F+111", "D-022"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rules) != 4 {
+		t.Fatalf("len(rules) = %d, want 4", len(rules))
+	}
+	if rules[0].Target != rsync233.ChmodFiles || rules[0].Op != rsync233.ChmodSet || rules[0].Mode != 0o644 {
+		t.Fatalf("unexpected first rule: %+v", rules[0])
+	}
+	if rules[1].Target != rsync233.ChmodDirs || rules[1].Op != rsync233.ChmodSet || rules[1].Mode != 0o755 {
+		t.Fatalf("unexpected second rule: %+v", rules[1])
+	}
+	if _, err := parseChmodRules([]string{"u+r"}); err == nil {
+		t.Fatal("expected unsupported chmod rule error")
+	}
 }
 
 func TestRunRejectsConflictingDeleteModes(t *testing.T) {

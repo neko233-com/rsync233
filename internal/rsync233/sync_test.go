@@ -400,6 +400,43 @@ func TestNoPermsLeavesExistingModeInArchive(t *testing.T) {
 	assertFile(t, dstFile, "#!/bin/sh\necho new\n")
 }
 
+func TestChmodRulesApplyToFilesAndDirs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not stable on Windows")
+	}
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	mustWrite(t, filepath.Join(src, "bin", "tool.sh"), "#!/bin/sh\n")
+
+	_, err := Sync(context.Background(), src+string(os.PathSeparator), dst, Options{
+		Archive: true,
+		NoPerms: true,
+		ChmodRules: []ChmodRule{
+			{Target: ChmodDirs, Op: ChmodSet, Mode: 0o755},
+			{Target: ChmodFiles, Op: ChmodSet, Mode: 0o644},
+			{Target: ChmodFiles, Op: ChmodAdd, Mode: 0o111},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirInfo, err := os.Stat(filepath.Join(dst, "bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dirInfo.Mode().Perm(); got != 0o755 {
+		t.Fatalf("dir mode = %v, want 0755", got)
+	}
+	fileInfo, err := os.Stat(filepath.Join(dst, "bin", "tool.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fileInfo.Mode().Perm(); got != 0o755 {
+		t.Fatalf("file mode = %v, want 0755", got)
+	}
+}
+
 func TestPreserveTimesCopiesSourceModTime(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "src")

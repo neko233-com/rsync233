@@ -50,6 +50,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	var maxSize sizeValue
 	var backupDir string
 	var backupSuffix string
+	var chmods multiValue
 	var checksum bool
 	var quiet bool
 
@@ -74,6 +75,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs.BoolVar(&opts.Backup, "backup", false, "make backups of overwritten or deleted destination files")
 	fs.StringVar(&backupDir, "backup-dir", "", "store backups under DIR using source-relative paths")
 	fs.StringVar(&backupSuffix, "suffix", "~", "backup suffix when --backup-dir is not used")
+	fs.Var(&chmods, "chmod", "apply chmod rule such as F=644,D=755,F+111; may be repeated")
 	fs.BoolVar(&opts.DryRun, "n", false, "show changes without writing")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "show changes without writing")
 	fs.BoolVar(&opts.Check, "check", false, "exit 2 when destination differs")
@@ -134,6 +136,11 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if opts.BackupDir != "" {
 		opts.Backup = true
 	}
+	chmodRules, err := parseChmodRules(chmods)
+	if err != nil {
+		return err
+	}
+	opts.ChmodRules = chmodRules
 	fileIncludes, err := readPatternFiles(includeFrom)
 	if err != nil {
 		return err
@@ -289,4 +296,56 @@ func parseSize(v string) (int64, error) {
 		return 0, fmt.Errorf("size %q overflows int64", v)
 	}
 	return n * multiplier, nil
+}
+
+func parseChmodRules(values []string) ([]rsync233.ChmodRule, error) {
+	var rules []rsync233.ChmodRule
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			rule, err := parseChmodRule(part)
+			if err != nil {
+				return nil, err
+			}
+			rules = append(rules, rule)
+		}
+	}
+	return rules, nil
+}
+
+func parseChmodRule(raw string) (rsync233.ChmodRule, error) {
+	rule := rsync233.ChmodRule{Target: rsync233.ChmodAll}
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return rule, fmt.Errorf("empty chmod rule")
+	}
+	if v[0] == 'F' || v[0] == 'f' {
+		rule.Target = rsync233.ChmodFiles
+		v = v[1:]
+	} else if v[0] == 'D' || v[0] == 'd' {
+		rule.Target = rsync233.ChmodDirs
+		v = v[1:]
+	}
+	if len(v) < 2 {
+		return rule, fmt.Errorf("invalid chmod rule %q", raw)
+	}
+	switch v[0] {
+	case '=':
+		rule.Op = rsync233.ChmodSet
+	case '+':
+		rule.Op = rsync233.ChmodAdd
+	case '-':
+		rule.Op = rsync233.ChmodRemove
+	default:
+		return rule, fmt.Errorf("invalid chmod rule %q: expected one of = + -", raw)
+	}
+	mode, err := strconv.ParseUint(v[1:], 8, 32)
+	if err != nil || mode > 0o777 {
+		return rule, fmt.Errorf("invalid chmod mode in %q", raw)
+	}
+	rule.Mode = os.FileMode(mode)
+	return rule, nil
 }
