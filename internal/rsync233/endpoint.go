@@ -77,7 +77,7 @@ func (e Endpoint) Address() string {
 }
 
 func parseScpLike(raw string) (Endpoint, bool) {
-	if runtime.GOOS == "windows" && len(raw) >= 2 && raw[1] == ':' {
+	if isWindowsDrivePath(raw) {
 		return Endpoint{}, false
 	}
 	colon := strings.IndexByte(raw, ':')
@@ -112,4 +112,12 @@ func hasTrailingSeparator(s string) bool {
 	}
 	clean := strings.TrimRight(s, " \t")
 	return strings.HasSuffix(clean, "/") || strings.HasSuffix(clean, "\\") || clean == "."+string(os.PathSeparator)
+}
+
+func isWindowsDrivePath(s string) bool {
+	if len(s) < 2 || s[1] != ':' {
+		return false
+	}
+	drive := s[0]
+	return (drive >= 'A' && drive <= 'Z') || (drive >= 'a' && drive <= 'z')
 }
